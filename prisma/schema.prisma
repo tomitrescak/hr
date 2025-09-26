@@ -1,0 +1,352 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  USER
+  PROJECT_MANAGER
+}
+
+enum CompetencyType {
+  KNOWLEDGE
+  SKILL
+  TECH_TOOL
+  ABILITY
+  VALUE
+  BEHAVIOUR
+  ENABLER
+}
+
+enum Proficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum LeanState {
+  BACKLOG
+  READY
+  IN_PROGRESS
+  BLOCKED
+  REVIEW
+  DONE
+}
+
+enum AssignmentType {
+  PROJECT
+  COURSE
+}
+
+enum ReviewStatus {
+  FINISHED
+  IN_PROGRESS
+  STALLED
+}
+
+enum Contribution {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ChangeState {
+  CREATED
+  MODIFIED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EntityKind {
+  PERSON
+  COURSE
+  PROJECT
+  TASK
+  ASSIGNMENT
+  REVIEW
+  PERSON_COMPETENCY
+  COURSE_COMPETENCY
+  RESPONSIBILITY
+  OKR
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// Models
+model User {
+  id           String @id @default(uuid())
+  email        String @unique
+  passwordHash String
+  name         String
+  role         Role   @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  person Person?
+  createdAssignments Assignment[] @relation("CreatedAssignments")
+  approvedReviews    Review[]     @relation("ApprovedReviews")
+  changeLogs         ChangeLog[]
+
+  @@map("users")
+}
+
+model Person {
+  id     String @id @default(uuid())
+  userId String @unique
+  name   String
+  email  String @unique
+  role   Role
+
+  // Relations
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competencies        PersonCompetency[]
+  assignments         Assignment[]
+  reviews             Review[]            @relation("PersonReviews")
+  taskAssignments     Task[]
+  projectResponsibilities ProjectResponsibility[]
+  courseEnrollments   CourseEnrollment[]
+
+  @@map("people")
+}
+
+model Competency {
+  id          String         @id @default(uuid())
+  type        CompetencyType
+  name        String
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  personCompetencies PersonCompetency[]
+  courseCompetencies CourseCompetency[]
+
+  @@map("competencies")
+}
+
+model PersonCompetency {
+  id            String       @id @default(uuid())
+  personId      String
+  competencyId  String
+  proficiency   Proficiency?
+  lastUpdatedAt DateTime     @default(now())
+
+  // Relations
+  person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, competencyId])
+  @@map("person_competencies")
+}
+
+model Course {
+  id             String        @id @default(uuid())
+  name           String
+  description    String?
+  content        String?
+  duration       Int?          // Duration in hours
+  maxEnrollments Int?
+  status         CourseStatus  @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  competencies CourseCompetency[]
+  assignments  Assignment[]
+  enrollments  CourseEnrollment[]
+
+  @@map("courses")
+}
+
+model CourseCompetency {
+  id           String @id @default(uuid())
+  courseId     String
+  competencyId String
+
+  // Relations
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, competencyId])
+  @@map("course_competencies")
+}
+
+model CourseEnrollment {
+  id          String    @id @default(uuid())
+  courseId    String
+  personId    String
+  progress    Int?      @default(0) // 0-100
+  completed   Boolean   @default(false)
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+
+  // Relations
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, personId])
+  @@map("course_enrollments")
+}
+
+model Project {
+  id          String @id @default(uuid())
+  name        String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  okrs            OKR[]
+  responsibilities ProjectResponsibility[]
+  tasks           Task[]
+  assignments     Assignment[]
+
+  @@map("projects")
+}
+
+model OKR {
+  id          String    @id @default(uuid())
+  projectId   String
+  title       String
+  description String
+  metric      String?
+  target      String?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("okrs")
+}
+
+model ProjectResponsibility {
+  id          String  @id @default(uuid())
+  projectId   String
+  personId    String?
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  person  Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@map("project_responsibilities")
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  assigneeId  String?
+  priority    Priority?  @default(MEDIUM)
+  state       LeanState  @default(BACKLOG)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee Person? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@map("tasks")
+}
+
+model Assignment {
+  id              String         @id @default(uuid())
+  personId        String
+  type            AssignmentType
+  projectId       String?
+  courseId        String?
+  startDate       DateTime       // Must be Monday
+  plannedEndDate  DateTime
+  createdById     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  person    Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("CreatedAssignments", fields: [createdById], references: [id])
+  reviews   Review[]
+
+  @@map("assignments")
+}
+
+model Review {
+  id               String             @id @default(uuid())
+  assignmentId     String
+  weekStartDate    DateTime           // Must match assignment week
+  status           ReviewStatus
+  competencyDeltas CompetencyDelta[]
+  reflection       String
+  positives        String[]
+  negatives        String[]
+  submittedById    String
+  submittedAt      DateTime           @default(now())
+  approvedById     String?
+  approvedAt       DateTime?
+  comment          String?
+
+  // Relations
+  assignment  Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submittedBy Person     @relation("PersonReviews", fields: [submittedById], references: [id])
+  approvedBy  User?      @relation("ApprovedReviews", fields: [approvedById], references: [id])
+
+  @@unique([assignmentId, weekStartDate])
+  @@map("reviews")
+}
+
+model CompetencyDelta {
+  id             String       @id @default(uuid())
+  reviewId       String
+  competencyId   String
+  newProficiency Proficiency?
+
+  // Relations
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@map("competency_deltas")
+}
+
+model ChangeLog {
+  id         String      @id @default(uuid())
+  entity     EntityKind
+  entityId   String
+  field      String
+  fromValue  Json?
+  toValue    Json?
+  state      ChangeState
+  changedAt  DateTime    @default(now())
+  changedById String
+
+  // Relations
+  changedBy User @relation(fields: [changedById], references: [id])
+
+  @@index([entity, entityId])
+  @@index([changedAt])
+  @@map("change_logs")
+}
