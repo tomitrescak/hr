@@ -8,6 +8,7 @@ import { Calendar, Clock, Settings, GripVertical } from "lucide-react"
 import Link from "next/link"
 import { CSS } from "@dnd-kit/utilities"
 import { useSortable } from "@dnd-kit/sortable"
+import { processCourseDescription } from "@/lib/utils"
 
 export interface CourseEnrollment {
   id: string
@@ -91,7 +92,7 @@ export function CourseCard({ enrollment, isDragging = false, onEditDates }: Cour
             </CardTitle>
             {enrollment.course.description && (
               <CardDescription className="mt-1 line-clamp-2">
-                {enrollment.course.description}
+                {processCourseDescription(enrollment.course.description, 150)}
               </CardDescription>
             )}
           </div>

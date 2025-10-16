@@ -400,6 +400,14 @@ export const peopleRouter = router({
             },
             orderBy: { createdAt: 'desc' },
           },
+          courseEnrollments: {
+            include: {
+              course: {
+                select: { id: true, name: true, description: true, duration: true },
+              },
+            },
+            orderBy: { enrolledAt: 'desc' },
+          },
         },
       })
 

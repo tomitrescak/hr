@@ -9,6 +9,7 @@ import { CourseCard, CourseEnrollment } from "./CourseCard"
 import { EditDatesDialog } from "./EditDatesDialog"
 import { Plus, Search, Loader2 } from "lucide-react"
 import { trpc } from "@/lib/trpc/client"
+import { processCourseDescription } from "@/lib/utils"
 import {
   DndContext,
   DragEndEvent,
@@ -273,7 +274,7 @@ export function DevelopmentPlan({ personId, canManage = false }: DevelopmentPlan
                         <div>
                           <h4 className="font-medium">{course.name}</h4>
                           {course.description && (
-                            <p className="text-sm text-muted-foreground mt-1">{course.description}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{processCourseDescription(course.description, 150)}</p>
                           )}
                           {course.duration && (
                             <p className="text-xs text-muted-foreground mt-1">{course.duration} hours</p>

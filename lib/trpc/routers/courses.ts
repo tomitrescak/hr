@@ -72,10 +72,19 @@ export const coursesRouter = router({
               },
             },
           },
+          specialisationCourses: {
+            include: {
+              course: {
+                select: { id: true, name: true, duration: true, description: true },
+              },
+            },
+            orderBy: { order: 'asc' },
+          },
           _count: {
             select: {
               enrollments: true,
               competencies: true,
+              specialisationCourses: true,
             },
           },
         },
@@ -98,12 +107,18 @@ export const coursesRouter = router({
         name: z.string().min(2),
         description: z.string().optional(),
         content: z.string().optional(),
+        url: z.string().url().optional().or(z.literal('')),
+        type: z.enum(['COURSE', 'SPECIALISATION']).default('COURSE'),
         duration: z.number().int().positive().optional(),
         competencyIds: z.array(z.string()).optional().default([]),
+        specialisationCourses: z.array(z.string()).optional().default([]),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { competencyIds, ...courseData } = input
+      const { competencyIds, specialisationCourses, url, ...courseData } = input
+      
+      // Clean up URL - convert empty string to null
+      const cleanUrl = url && url.trim() !== '' ? url : null
 
       // Check if course with same name already exists
       const existing = await ctx.db.course.findFirst({
@@ -131,15 +146,42 @@ export const coursesRouter = router({
           })
         }
       }
+      
+      // For specialisations, validate that selected courses exist and are of type COURSE
+      if (input.type === 'SPECIALISATION' && specialisationCourses.length > 0) {
+        const courses = await ctx.db.course.findMany({
+          where: {
+            id: { in: specialisationCourses },
+            type: 'COURSE',
+          },
+          select: { id: true },
+        })
+
+        if (courses.length !== specialisationCourses.length) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'One or more specialisation course IDs are invalid or not of type COURSE',
+          })
+        }
+      }
 
       const course = await ctx.db.course.create({
         data: {
           ...courseData,
+          url: cleanUrl,
           competencies: {
             create: competencyIds.map((competencyId) => ({
               competency: { connect: { id: competencyId } },
             })),
           },
+          ...(input.type === 'SPECIALISATION' && specialisationCourses.length > 0 && {
+            specialisationCourses: {
+              create: specialisationCourses.map((courseId, index) => ({
+                course: { connect: { id: courseId } },
+                order: index + 1,
+              })),
+            },
+          }),
         },
         include: {
           competencies: {
@@ -149,10 +191,19 @@ export const coursesRouter = router({
               },
             },
           },
+          specialisationCourses: {
+            include: {
+              course: {
+                select: { id: true, name: true, duration: true },
+              },
+            },
+            orderBy: { order: 'asc' },
+          },
           _count: {
             select: {
               enrollments: true,
               competencies: true,
+              specialisationCourses: true,
             },
           },
         },
@@ -164,7 +215,7 @@ export const coursesRouter = router({
           entity: 'COURSE',
           entityId: course.id,
           field: 'created',
-          toValue: { ...courseData, competencyIds },
+          toValue: { ...courseData, url: cleanUrl, competencyIds, specialisationCourses },
           state: 'CREATED',
           changedById: ctx.session.user.id,
         },
@@ -181,17 +232,24 @@ export const coursesRouter = router({
         name: z.string().min(2).optional(),
         description: z.string().optional(),
         content: z.string().optional(),
+        url: z.string().url().optional().or(z.literal('')),
+        type: z.enum(['COURSE', 'SPECIALISATION']).optional(),
         duration: z.number().int().positive().optional(),
         competencyIds: z.array(z.string()).optional(),
+        specialisationCourses: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, competencyIds, ...updates } = input
+      const { id, competencyIds, specialisationCourses, url, ...updates } = input
+      
+      // Clean up URL - convert empty string to null
+      const cleanUrl = url !== undefined ? (url && url.trim() !== '' ? url : null) : undefined
 
       const current = await ctx.db.course.findUnique({
         where: { id },
         include: {
           competencies: { select: { competencyId: true } },
+          specialisationCourses: { select: { courseId: true } },
         },
       })
 
@@ -203,7 +261,7 @@ export const coursesRouter = router({
       }
 
       const filteredUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, v]) => v !== undefined)
+        Object.entries({ ...updates, ...(cleanUrl !== undefined && { url: cleanUrl }) }).filter(([_, v]) => v !== undefined)
       )
 
       // Check for name conflicts if name is being changed
@@ -237,6 +295,24 @@ export const coursesRouter = router({
           })
         }
       }
+      
+      // For specialisations, validate that selected courses exist and are of type COURSE
+      if (specialisationCourses) {
+        const courses = await ctx.db.course.findMany({
+          where: {
+            id: { in: specialisationCourses },
+            type: 'COURSE',
+          },
+          select: { id: true },
+        })
+
+        if (courses.length !== specialisationCourses.length) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'One or more specialisation course IDs are invalid or not of type COURSE',
+          })
+        }
+      }
 
       const course = await ctx.db.course.update({
         where: { id },
@@ -250,6 +326,15 @@ export const coursesRouter = router({
               })),
             },
           }),
+          ...(specialisationCourses !== undefined && {
+            specialisationCourses: {
+              deleteMany: {},
+              create: specialisationCourses.map((courseId, index) => ({
+                course: { connect: { id: courseId } },
+                order: index + 1,
+              })),
+            },
+          }),
         },
         include: {
           competencies: {
@@ -259,10 +344,19 @@ export const coursesRouter = router({
               },
             },
           },
+          specialisationCourses: {
+            include: {
+              course: {
+                select: { id: true, name: true, duration: true },
+              },
+            },
+            orderBy: { order: 'asc' },
+          },
           _count: {
             select: {
               enrollments: true,
               competencies: true,
+              specialisationCourses: true,
             },
           },
         },

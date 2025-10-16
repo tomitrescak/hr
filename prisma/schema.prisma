@@ -85,6 +85,11 @@ enum Priority {
   HIGH
 }
 
+enum CourseType {
+  COURSE
+  SPECIALISATION
+}
+
 enum ProjectStatus {
   ACTIVE
   COMPLETED
@@ -171,6 +176,8 @@ model Course {
   name           String
   description    String?
   content        String?
+  url            String?       // External URL for the course
+  type           CourseType    @default(COURSE)
   duration       Int?          // Duration in hours
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -179,6 +186,10 @@ model Course {
   competencies CourseCompetency[]
   assignments  Assignment[]
   enrollments  CourseEnrollment[]
+  
+  // Specialisation relations
+  specialisationCourses SpecialisationCourse[] @relation("SpecialisationToSpecialisationCourse")
+  courseSpecialisations SpecialisationCourse[] @relation("CourseToSpecialisationCourse")
 
   @@map("courses")
 }
@@ -195,6 +206,21 @@ model CourseCompetency {
 
   @@unique([courseId, competencyId])
   @@map("course_competencies")
+}
+
+model SpecialisationCourse {
+  id               String @id @default(uuid())
+  specialisationId String
+  courseId         String
+  order            Int?   // Optional ordering for courses within specialisation
+  createdAt        DateTime @default(now())
+
+  // Relations
+  specialisation Course @relation("SpecialisationToSpecialisationCourse", fields: [specialisationId], references: [id], onDelete: Cascade)
+  course         Course @relation("CourseToSpecialisationCourse", fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([specialisationId, courseId])
+  @@map("specialisation_courses")
 }
 
 enum EnrollmentStatus {

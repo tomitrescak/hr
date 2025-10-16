@@ -37,6 +37,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { CreateCourseForm } from '@/components/courses/CreateCourseForm'
 import { AppLayout } from '@/components/layout/app-layout'
+import { processCourseDescription } from '@/lib/utils'
 
 
 export default function CoursesPage() {
@@ -238,7 +239,7 @@ export default function CoursesPage() {
                         </button>
                         {course.description && (
                           <p className="text-sm text-muted-foreground mt-1 max-w-xs truncate">
-                            {course.description}
+                            {processCourseDescription(course.description, 150)}
                           </p>
                         )}
                       </div>

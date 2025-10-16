@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CompetencyGrid } from "@/components/ui/competency"
 import { trpc } from "@/lib/trpc/client"
 import { Role } from "@prisma/client"
-import { ArrowLeft, User, BookOpen, Calendar, MessageSquare, Edit, Save, X, Grid3X3, List, Plus, Trash2, Settings, ChevronUp, ChevronDown, CheckSquare, ExternalLink, Mic, MicOff, Loader2 as LoaderIcon, FileText, Square } from "lucide-react"
+import { ArrowLeft, User, BookOpen, Calendar, MessageSquare, Edit, Save, X, Grid3X3, List, Plus, Trash2, Settings, ChevronUp, ChevronDown, CheckSquare, CheckCircle, ExternalLink, Mic, MicOff, Loader2 as LoaderIcon, FileText, Square } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { useViewPreference } from "@/lib/use-view-preference"
@@ -27,6 +27,8 @@ import { DevelopmentPlan } from '@/components/courses/DevelopmentPlan'
 import { CompetencyExtractor } from '@/components/courses/CompetencyExtractor'
 import CVFileUpload from '@/components/CVFileUpload'
 import { marked } from 'marked'
+import { supportsProficiency } from '@/lib/utils/competency'
+import { processCourseDescription } from '@/lib/utils'
 
 interface PersonPageProps {
   params: Promise<{
@@ -826,58 +828,168 @@ ${tasksMarkdown}`
                       </Button>
                     </div>
                   </>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Name</Label>
-                      <div className="mt-1 text-sm">{person.name}</div>
-                    </div>
-                    <div>
-                      <Label>Email</Label>
-                      <div className="mt-1 text-sm text-muted-foreground">{person.email}</div>
-                    </div>
-                    <div>
-                      <Label>Role</Label>
-                      <div className="mt-1">
-                        <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
-                          {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
-                        </Badge>
+) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Name</Label>
+                        <div className="mt-1 text-sm">{person.name}</div>
                       </div>
-                    </div>
-                    <div>
-                      <Label>Entry Date</Label>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {person.entryDate ? new Date(person.entryDate).toLocaleDateString() : 'Not set'}
+                      <div>
+                        <Label>Email</Label>
+                        <div className="mt-1 text-sm text-muted-foreground">{person.email}</div>
                       </div>
-                    </div>
-                    <div>
-                      <Label>Time in Company</Label>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {person.entryDate ? calculateTenure(person.entryDate) : 'Not available'}
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Member Since</Label>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {new Date((person as any).user?.createdAt || Date.now()).toLocaleDateString()}
-                      </div>
-                    </div>
-                    {person.cv && (
-                      <div className="col-span-2">
-                        <h1 className="text-2xl font-semibold">CV / Resume</h1>
-                        <hr className="my-2" />
-                        
-                          <div 
-                            className="cv-content"
-                            dangerouslySetInnerHTML={{ __html: markdownToHtml(person.cv) }}
-                          />
+                      <div>
+                        <Label>Role</Label>
+                        <div className="mt-1">
+                          <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
+                            {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
+                          </Badge>
                         </div>
+                      </div>
+                      <div>
+                        <Label>Entry Date</Label>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {person.entryDate ? new Date(person.entryDate).toLocaleDateString() : 'Not set'}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Time in Company</Label>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {person.entryDate ? calculateTenure(person.entryDate) : 'Not available'}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Member Since</Label>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {new Date((person as any).user?.createdAt || Date.now()).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Courses Section */}
+                    {(person as any).courseEnrollments && (person as any).courseEnrollments.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <BookOpen className="h-5 w-5" />
+                          <h3 className="text-lg font-semibold">Courses</h3>
+                          <Badge variant="secondary">
+                            {(person as any).courseEnrollments.length}
+                          </Badge>
+                        </div>
+                        <div className="border rounded-lg">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Course</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Progress</TableHead>
+                                <TableHead>Duration</TableHead>
+                                <TableHead>Enrolled</TableHead>
+                                <TableHead>Completed</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(person as any).courseEnrollments.map((enrollment: any) => {
+                                const statusConfig = {
+                                  WISHLIST: {
+                                    label: 'Wishlist',
+                                    className: 'bg-gray-100 text-gray-800',
+                                    icon: BookOpen
+                                  },
+                                  IN_PROGRESS: {
+                                    label: 'In Progress', 
+                                    className: 'bg-blue-100 text-blue-800',
+                                    icon: Calendar
+                                  },
+                                  COMPLETED: {
+                                    label: 'Completed',
+                                    className: 'bg-green-100 text-green-800', 
+                                    icon: CheckCircle
+                                  }
+                                }
+                                const config = statusConfig[enrollment.status as keyof typeof statusConfig] || statusConfig.WISHLIST
+                                const StatusIcon = config.icon
+                                
+                                return (
+                                  <TableRow key={enrollment.id}>
+                                    <TableCell>
+                                      <div>
+                                        <Link href={`/courses/${enrollment.course.id}`}>
+                                          <div className="font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
+                                            {enrollment.course.name}
+                                          </div>
+                                        </Link>
+                                        {enrollment.course.description && (
+                                          <div className="text-sm text-muted-foreground mt-1 max-w-xs truncate">
+                                            {processCourseDescription(enrollment.course.description, 150)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={config.className}>
+                                        <StatusIcon className="h-3 w-3 mr-1" />
+                                        {config.label}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-16 bg-gray-200 rounded-full h-2">
+                                          <div 
+                                            className="bg-blue-600 h-2 rounded-full" 
+                                            style={{ width: `${enrollment.progress || 0}%` }}
+                                          ></div>
+                                        </div>
+                                        <span className="text-sm text-muted-foreground">
+                                          {enrollment.progress || 0}%
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      {enrollment.course.duration ? `${enrollment.course.duration}h` : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className="text-sm text-muted-foreground">
+                                        {new Date(enrollment.enrolledAt).toLocaleDateString()}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
+                                      {enrollment.completedAt ? (
+                                        <span className="text-sm text-muted-foreground">
+                                          {new Date(enrollment.completedAt).toLocaleDateString()}
+                                        </span>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">-</span>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* CV Section */}
+                    {person.cv && (
+                      <div>
+                        
+                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 mb-4"> <BookOpen className="h-5 w-5" /> CV / Resume</h3>
+                        
+                        <hr className="mb-4" />
+                        <div 
+                          className="cv-content"
+                          dangerouslySetInnerHTML={{ __html: markdownToHtml(person.cv) }}
+                        />
+                      </div>
                     )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
           {/* Competencies Tab */}
           <TabsContent value="competencies" className="space-y-4">
@@ -1034,7 +1146,7 @@ ${tasksMarkdown}`
                     </TableHeader>
                     <TableBody>
                       {sortedCompetencies.map((competency: any) => {
-                        const showProficiencyForType = ['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE'].includes(competency.type)
+                        const showProficiencyForType = supportsProficiency(competency.type)
                         return (
                           <TableRow key={competency.id}>
                             <TableCell className="font-medium">
@@ -1739,8 +1851,7 @@ function AddCompetencyForm({
   }, [availableCompetencies, selectedType, existingCompetencies, competencySearch])
   
   const selectedCompetency = availableCompetencies.find(c => c.id === selectedCompetencyId)
-  const supportsProficiency = (selectedCompetency?.type || selectedType) && 
-    ['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE'].includes(selectedCompetency?.type || selectedType)
+  const shouldShowProficiency = supportsProficiency((selectedCompetency?.type || selectedType) as any)
   
   const handleCreateNew = async () => {
     if (!newCompetencyName.trim() || !selectedType) return
@@ -1753,7 +1864,7 @@ function AddCompetencyForm({
       })
       
       // Add the newly created competency
-      await onAdd(newCompetency.id, supportsProficiency && proficiency ? proficiency : undefined)
+      await onAdd(newCompetency.id, shouldShowProficiency && proficiency ? proficiency : undefined)
       
       // Reset form
       setSelectedType('')
@@ -1771,7 +1882,7 @@ function AddCompetencyForm({
     if (isCreatingNew) {
       await handleCreateNew()
     } else if (selectedCompetencyId) {
-      await onAdd(selectedCompetencyId, supportsProficiency && proficiency ? proficiency : undefined)
+      await onAdd(selectedCompetencyId, shouldShowProficiency && proficiency ? proficiency : undefined)
       // Reset form
       setSelectedType('')
       setSelectedCompetencyId('')
@@ -1974,7 +2085,7 @@ function AddCompetencyForm({
         </div>
       )}
       
-      {supportsProficiency && (selectedCompetencyId || isCreatingNew) && (
+      {shouldShowProficiency && (selectedCompetencyId || isCreatingNew) && (
         <div className="space-y-2">
           <Label>Proficiency Level</Label>
           <Select value={proficiency} onValueChange={setProficiency}>
@@ -2014,11 +2125,11 @@ interface EditCompetencyFormProps {
 }
 
 function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyFormProps) {
-  const supportsProficiency = ['KNOWLEDGE', 'SKILL', 'TECH_TOOL', 'ABILITY'].includes(competency.type)
+  const shouldShowProficiency = supportsProficiency(competency.type)
   const [proficiency, setProficiency] = useState(competency.proficiency || '')
   
   const handleSubmit = () => {
-    onSave(competency.id, supportsProficiency && proficiency ? proficiency : undefined)
+    onSave(competency.id, shouldShowProficiency && proficiency ? proficiency : undefined)
   }
   
   return (
@@ -2038,7 +2149,7 @@ function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyForm
         </div>
       </div>
       
-      {supportsProficiency && (
+      {shouldShowProficiency && (
         <div className="space-y-2">
           <Label>Proficiency Level</Label>
           <div className="flex gap-2">

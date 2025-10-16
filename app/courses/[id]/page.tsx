@@ -16,11 +16,12 @@ import {
   User,
   GraduationCap,
   Target,
-  UserPlus
+  UserPlus,
+  ExternalLink
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -154,7 +155,23 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{course.name}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">{course.name}</h1>
+              <Badge variant="outline" className={course.type === 'SPECIALISATION' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}>
+                {course.type === 'SPECIALISATION' ? 'Specialisation' : 'Course'}
+              </Badge>
+            </div>
+            {course.url && (
+              <a
+                href={course.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 underline mt-2 inline-flex items-center gap-1"
+              >
+                <ExternalLink className="h-4 w-4" />
+                View Course
+              </a>
+            )}
           </div>
         </div>
         <div className="flex space-x-2">
@@ -273,6 +290,12 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
             <Users className="h-4 w-4 mr-2" />
             Enrollments ({course.enrollments.length})
           </TabsTrigger>
+          {course.type === 'SPECIALISATION' && (
+            <TabsTrigger value="courses" className="flex items-center">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Courses ({course.specialisationCourses?.length || 0})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="competencies" className="flex items-center">
             <Target className="h-4 w-4 mr-2" />
             Competencies ({course.competencies.length})
@@ -356,6 +379,70 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Specialisation Courses Tab */}
+        {course.type === 'SPECIALISATION' && (
+          <TabsContent value="courses">
+            <Card>
+              <CardHeader>
+                <CardTitle>Included Courses</CardTitle>
+                <CardDescription>
+                  Courses that are part of this specialisation learning path
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {course.specialisationCourses && course.specialisationCourses.length > 0 ? (
+                  <div className="grid gap-4">
+                    {course.specialisationCourses.map((specialisationCourse, index) => (
+                      <Card key={specialisationCourse.id} className="border-l-4 border-l-blue-500">
+                        <CardContent className="pt-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {index + 1}
+                                </Badge>
+                                <button
+                                  onClick={() => router.push(`/courses/${specialisationCourse.course.id}`)}
+                                  className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  {specialisationCourse.course.name}
+                                </button>
+                              </div>
+                              {specialisationCourse.course.description && (
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {specialisationCourse.course.description.substring(0, 150)}...
+                                </p>
+                              )}
+                              {specialisationCourse.course.duration && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  {specialisationCourse.course.duration} hours
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/courses/${specialisationCourse.course.id}`)}
+                            >
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No courses added to this specialisation yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Competencies Tab */}
         <TabsContent value="competencies">

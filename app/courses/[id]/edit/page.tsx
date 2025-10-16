@@ -9,7 +9,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { 
   ArrowLeft, 
-  Save
+  Save,
+  X
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -28,11 +30,14 @@ import {
 import { AppLayout } from '@/components/layout/app-layout'
 import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
 import { CompetencyExtractor } from '@/components/courses/CompetencyExtractor'
+import { removeMarkdown } from '@/lib/utils'
 
 const courseSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   description: z.string().optional(),
   content: z.string().optional(),
+  url: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  type: z.enum(['COURSE', 'SPECIALISATION']).default('COURSE'),
   duration: z.string().transform(val => val ? parseInt(val, 10) : undefined).optional(),
 })
 
@@ -40,6 +45,8 @@ type CourseFormData = {
   name: string
   description?: string
   content?: string
+  url?: string
+  type: 'COURSE' | 'SPECIALISATION'
   duration?: string
 }
 
@@ -53,6 +60,9 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
   const { id } = use(params)
   const { data: session } = useSession()
   const router = useRouter()
+  const [descriptionLength, setDescriptionLength] = useState(0)
+  const [courseType, setCourseType] = useState<'COURSE' | 'SPECIALISATION'>('COURSE')
+  const [selectedSpecialisationCourses, setSelectedSpecialisationCourses] = useState<string[]>([])
 
   const {
     data: course,
@@ -61,12 +71,14 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
   } = trpc.courses.getById.useQuery({ id })
 
   const { data: allCompetencies } = trpc.competencies.list.useQuery()
+  const { data: allCourses } = trpc.courses.list.useQuery()
 
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<CourseFormData>({
     resolver: zodResolver(courseSchema),
@@ -74,6 +86,8 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
       name: '',
       description: '',
       content: '',
+      url: '',
+      type: 'COURSE',
       duration: '',
     },
   })
@@ -85,8 +99,17 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         name: course.name,
         description: course.description || '',
         content: course.content || '',
+        url: course.url || '',
+        type: course.type || 'COURSE',
         duration: course.duration?.toString() || '',
       })
+      // Update state variables
+      const processedLength = removeMarkdown(course.description || '').length
+      setDescriptionLength(processedLength)
+      setCourseType(course.type || 'COURSE')
+      setSelectedSpecialisationCourses(
+        course.specialisationCourses?.map(sc => sc.courseId) || []
+      )
     }
   }, [course, reset])
 
@@ -137,6 +160,27 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
   })
 
   const canManage = session?.user?.role === 'PROJECT_MANAGER'
+  
+  const handleSpecialisationCourseToggle = (courseId: string) => {
+    setSelectedSpecialisationCourses(prev => {
+      const newSelection = prev.includes(courseId)
+        ? prev.filter(id => id !== courseId)
+        : [...prev, courseId]
+      
+      return newSelection
+    })
+  }
+
+  const removeSpecialisationCourse = (courseId: string) => {
+    setSelectedSpecialisationCourses(prev => {
+      const newSelection = prev.filter(id => id !== courseId)
+      return newSelection
+    })
+  }
+  
+  const selectedSpecialisationCourseObjects = allCourses?.filter(c => 
+    selectedSpecialisationCourses.includes(c.id) && c.type === 'COURSE'
+  ) || []
 
   const onSubmit = async (data: CourseFormData) => {
     try {
@@ -145,7 +189,10 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         name: data.name,
         description: data.description,
         content: data.content,
+        url: data.url,
+        type: data.type,
         duration: data.duration ? parseInt(data.duration, 10) : undefined,
+        specialisationCourses: courseType === 'SPECIALISATION' ? selectedSpecialisationCourses : [],
       })
     } catch (error) {
       console.error('Failed to update course:', error)
@@ -283,25 +330,166 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                 )}
               </div>
 
+              {/* Course Type */}
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Enter course description"
-                  rows={3}
-                  {...register('description')}
+                <Label htmlFor="type">Course Type</Label>
+                <Select
+                  value={courseType}
+                  onValueChange={(value: 'COURSE' | 'SPECIALISATION') => {
+                    setCourseType(value)
+                    setValue('type', value)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select course type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COURSE">Course</SelectItem>
+                    <SelectItem value="SPECIALISATION">Specialisation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {courseType === 'COURSE' 
+                    ? 'A standalone course with its own content and competencies'
+                    : 'A collection of multiple courses that form a learning path'
+                  }
+                </p>
+              </div>
+
+              {/* Course URL */}
+              <div className="space-y-2">
+                <Label htmlFor="url">Course URL</Label>
+                <Input
+                  id="url"
+                  type="url"
+                  placeholder="https://example.com/course"
+                  {...register('url')}
                 />
+                {errors.url && (
+                  <p className="text-sm text-destructive">{errors.url.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  External link to the course content (optional)
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="content">Course Content</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="description">Description</Label>
+                  <span className={`text-xs ${
+                    descriptionLength > 150 ? 'text-destructive' : 'text-muted-foreground'
+                  }`}>
+                    {descriptionLength}/150 characters
+                  </span>
+                </div>
                 <Textarea
-                  id="content"
-                  placeholder="Enter detailed course content"
-                  rows={6}
-                  {...register('content')}
+                  id="description"
+                  placeholder="Enter course description (max 150 characters when processed)"
+                  rows={3}
+                  {...register('description', {
+                    onChange: (e) => {
+                      const value = e.target.value
+                      const processedLength = removeMarkdown(value).length
+                      setDescriptionLength(processedLength)
+                    }
+                  })}
                 />
+                {descriptionLength > 150 && (
+                  <p className="text-sm text-destructive">
+                    Description is too long. Current: {descriptionLength} characters, limit: 150 characters (after markdown processing)
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Markdown formatting will be automatically removed in course cards
+                </p>
               </div>
+
+              {/* Course Content - Only for regular courses */}
+              {courseType === 'COURSE' && (
+                <div className="space-y-2">
+                  <Label htmlFor="content">Course Content</Label>
+                  <Textarea
+                    id="content"
+                    placeholder="Enter detailed course content"
+                    rows={6}
+                    {...register('content')}
+                  />
+                </div>
+              )}
+
+              {/* Specialisation Courses - Only for specialisations */}
+              {courseType === 'SPECIALISATION' && (
+                <div className="space-y-4">
+                  <div>
+                    <Label>Included Courses</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Select courses that are part of this specialisation
+                    </p>
+                  </div>
+
+                  {/* Selected Specialisation Courses */}
+                  {selectedSpecialisationCourseObjects.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Selected Courses ({selectedSpecialisationCourseObjects.length})</Label>
+                      <div className="flex flex-wrap gap-2 p-3 border rounded-lg max-h-32 overflow-y-auto">
+                        {selectedSpecialisationCourseObjects.map((course) => (
+                          <Badge
+                            key={course.id}
+                            variant="secondary"
+                            className="bg-blue-100 text-blue-800"
+                          >
+                            {course.name}
+                            <button
+                              type="button"
+                              onClick={() => removeSpecialisationCourse(course.id)}
+                              className="ml-2 hover:bg-black/10 rounded-full p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Available Courses List */}
+                  <div className="space-y-2">
+                    <Label>Available Courses</Label>
+                    <div className="border rounded-lg p-3 max-h-48 overflow-y-auto">
+                      {allCourses?.filter(c => c.type === 'COURSE' && c.id !== id).length === 0 && (
+                        <p className="text-sm text-muted-foreground">No courses available</p>
+                      )}
+                      {allCourses?.filter(c => c.type === 'COURSE' && c.id !== id).map((course) => (
+                        <div key={course.id} className="flex items-center space-x-2 py-2">
+                          <Checkbox
+                            id={`specialisation-course-${course.id}`}
+                            checked={selectedSpecialisationCourses.includes(course.id)}
+                            onCheckedChange={() => handleSpecialisationCourseToggle(course.id)}
+                          />
+                          <label
+                            htmlFor={`specialisation-course-${course.id}`}
+                            className="flex-1 text-sm cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{course.name}</span>
+                              {course.duration && (
+                                <Badge variant="outline" className="text-xs">
+                                  {course.duration}h
+                                </Badge>
+                              )}
+                            </div>
+                            {course.description && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {course.description.substring(0, 100)}...
+                              </p>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
