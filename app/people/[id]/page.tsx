@@ -26,6 +26,7 @@ import { Loader2, Search } from 'lucide-react'
 import { DevelopmentPlan } from '@/components/courses/DevelopmentPlan'
 import { CompetencyExtractor } from '@/components/courses/CompetencyExtractor'
 import { Avatar } from '@/components/ui/avatar'
+import { ImageCropper } from '@/components/ui/image-cropper'
 import CVFileUpload from '@/components/CVFileUpload'
 import { marked } from 'marked'
 import { supportsProficiency } from '@/lib/utils/competency'
@@ -98,6 +99,9 @@ export default function PersonPage({ params }: PersonPageProps) {
   
   // CV upload state
   const [cvUploadError, setCvUploadError] = useState('')
+  
+  // Photo upload state
+  const [showPhotoCropper, setShowPhotoCropper] = useState(false)
   
   
   const { data: person, isLoading, refetch } = trpc.people.getById.useQuery({ id })
@@ -801,45 +805,37 @@ ${tasksMarkdown}`
                         </div>
                         
                         <div className="flex-1 space-y-4">
-                          <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
-                            <h4 className="font-medium text-gray-900 mb-2">Upload New Photo</h4>
-                            <p className="text-sm text-gray-600 mb-4">
-                              Choose a JPEG image under 200KB for your profile photo
-                            </p>
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0]
-                                if (file) {
-                                  if (file.size > 200 * 1024) {
-                                    alert('Photo must be under 200KB')
-                                    return
-                                  }
-                                  if (!file.type.includes('jpeg')) {
-                                    alert('Only JPEG images are supported')
-                                    return
-                                  }
-                                  
-                                  const reader = new FileReader()
-                                  reader.onload = (event) => {
-                                    const base64String = event.target?.result as string
-                                    setProfileForm(prev => ({ ...prev, photo: base64String }))
-                                  }
-                                  reader.readAsDataURL(file)
-                                }
-                              }}
-                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                            />
-                            <div className="mt-2 text-xs text-gray-500">
-                              Maximum size: 200KB • Format: JPEG only
+                          {!showPhotoCropper ? (
+                            <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
+                              <h4 className="font-medium text-gray-900 mb-2">Upload New Photo</h4>
+                              <p className="text-sm text-gray-600 mb-4">
+                                Choose a JPEG image to crop for your profile photo
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => setShowPhotoCropper(true)}
+                                className="w-full"
+                              >
+                                Select & Crop Photo
+                              </Button>
+                              <div className="mt-2 text-xs text-gray-500">
+                                Final size: 200×200px • Under 200KB • JPEG format
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <ImageCropper
+                              onCrop={(croppedBase64) => {
+                                setProfileForm(prev => ({ ...prev, photo: croppedBase64 }))
+                                setShowPhotoCropper(false)
+                              }}
+                              onCancel={() => setShowPhotoCropper(false)}
+                            />
+                          )}
                           
-                          {profileForm.photo && (
+                          {profileForm.photo && !showPhotoCropper && (
                             <div className="flex items-center gap-2">
                               <div className="flex-1 text-sm text-green-600">
-                                ✓ New photo selected and ready to save
+                                ✓ New photo cropped and ready to save
                               </div>
                               <Button
                                 type="button"
@@ -856,11 +852,31 @@ ${tasksMarkdown}`
                     </div>
                     
                     <div className="space-y-4">
-                      <Label>CV / Resume</Label>
-                      <div className="space-y-4">
-                        {/* File Upload Section */}
+                        
+                        
+                        {/* Manual Text Entry */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-xl">
+                            <Label htmlFor="cv" className="text-xl">CV / Resume</Label>
+                            <span className="text-xs text-gray-500">
+                              {profileForm.cv.length} characters
+                            </span>
+                          </div>
+                          <Textarea
+                            id="cv"
+                            value={profileForm.cv}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, cv: e.target.value }))}
+                            rows={8}
+                            placeholder="Paste your CV or resume content here for AI competency extraction..."
+                          />
+                          <p className="text-xs text-gray-500">
+                            The CV content will be used for automatic competency extraction using AI
+                          </p>
+                        </div>
+
+                      {/* File Upload Section */}
                         <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
-                          <h4 className="font-medium text-gray-900 mb-2">Upload CV File</h4>
+                          <h4 className="font-medium text-gray-900 mb-2 text-xl">Upload CV File</h4>
                           <p className="text-sm text-gray-600 mb-4">
                             Upload your CV file for automatic processing and competency extraction
                           </p>
@@ -878,27 +894,6 @@ ${tasksMarkdown}`
                             </div>
                           )}
                         </div>
-                        
-                        {/* Manual Text Entry */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="cv">Or Enter CV Content Manually</Label>
-                            <span className="text-xs text-gray-500">
-                              {profileForm.cv.length} characters
-                            </span>
-                          </div>
-                          <Textarea
-                            id="cv"
-                            value={profileForm.cv}
-                            onChange={(e) => setProfileForm(prev => ({ ...prev, cv: e.target.value }))}
-                            rows={8}
-                            placeholder="Paste your CV or resume content here for AI competency extraction..."
-                          />
-                          <p className="text-xs text-gray-500">
-                            The CV content will be used for automatic competency extraction using AI
-                          </p>
-                        </div>
-                      </div>
                     </div>
                     
                     <div className="flex gap-2">
@@ -952,44 +947,7 @@ ${tasksMarkdown}`
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Entry Date</Label>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {person.entryDate ? new Date(person.entryDate).toLocaleDateString() : 'Not set'}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Email</Label>
-                        <div className="mt-1 text-sm text-muted-foreground">{person.email}</div>
-                      </div>
-                      <div>
-                        <Label>Role</Label>
-                        <div className="mt-1">
-                          <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
-                            {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Entry Date</Label>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {person.entryDate ? new Date(person.entryDate).toLocaleDateString() : 'Not set'}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Time in Company</Label>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {person.entryDate ? calculateTenure(person.entryDate) : 'Not available'}
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Member Since</Label>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {new Date((person as any).user?.createdAt || Date.now()).toLocaleDateString()}
-                        </div>
-                      </div>
-                    </div>
+                    
                     
                     {/* Courses Section */}
                     {(person as any).courseEnrollments && (person as any).courseEnrollments.length > 0 && (
