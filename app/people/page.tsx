@@ -257,13 +257,13 @@ function PeopleOverviewTab({
                 >
                   Name
                 </SortableTableHeader>
-                <SortableTableHeader 
+                {/* <SortableTableHeader 
                   sortKey="email" 
                   currentSort={sortConfig} 
                   onSort={handleSort}
                 >
                   Email
-                </SortableTableHeader>
+                </SortableTableHeader> */}
                 <SortableTableHeader 
                   sortKey="role" 
                   currentSort={sortConfig} 
@@ -290,7 +290,7 @@ function PeopleOverviewTab({
                   currentSort={sortConfig} 
                   onSort={handleSort}
                 >
-                  Assignments
+                  Allocations
                 </SortableTableHeader>
                 {isManager && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
@@ -318,7 +318,7 @@ function PeopleOverviewTab({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{person.email}</TableCell>
+                  {/* <TableCell className="text-muted-foreground">{person.email}</TableCell> */}
                   <TableCell>
                     <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
                       {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
@@ -326,7 +326,7 @@ function PeopleOverviewTab({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{person.capacity}%</Badge>
+                      {/* <Badge variant="outline">{person.capacity}%</Badge> */}
                       <Badge 
                         variant={person.isOverCapacity ? "destructive" : "secondary"}
                         className={person.isOverCapacity ? "bg-red-100 text-red-800" : ""}

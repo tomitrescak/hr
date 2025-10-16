@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Brain, CheckCircle, XCircle, Loader2, Sparkles, Edit2, Check, X, Eye, EyeOff } from 'lucide-react'
+import { Brain, CheckCircle, XCircle, Loader2, Sparkles, Edit2, Check, X, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +23,15 @@ interface ExtractedCompetency {
   suggestedProficiency: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT'
 }
 
+interface SimilarCompetency {
+  id: string
+  name: string
+  type: string
+  description?: string
+  similarity: number
+  embedding?: number[]
+}
+
 interface CompetencyExtractorProps {
   entityId: string
   entityName: string
@@ -36,6 +45,7 @@ interface CompetencyExtractorProps {
   onAddCompetency: (competencyId: string, proficiency?: string) => Promise<void>
   createCompetency: any // TRPC mutation
   allCompetencies: any[] // List of all available competencies
+  existingCompetencies?: any[] // List of competencies already assigned to this entity
 }
 
 export function CompetencyExtractor({ 
@@ -49,7 +59,8 @@ export function CompetencyExtractor({
   buttonColor, 
   onAddCompetency, 
   createCompetency, 
-  allCompetencies 
+  allCompetencies,
+  existingCompetencies = []
 }: CompetencyExtractorProps) {
   const [extractedCompetencies, setExtractedCompetencies] = useState<(ExtractedCompetency & { id: string })[]>([])
   const [competencyStates, setCompetencyStates] = useState<Record<string, {
@@ -59,11 +70,20 @@ export function CompetencyExtractor({
   const [editingStates, setEditingStates] = useState<Record<string, {
     isEditing: boolean
   }>>({})
+  const [similarCompetencies, setSimilarCompetencies] = useState<Record<string, SimilarCompetency[]>>({})
+  const [processedSimilarCompetencies, setProcessedSimilarCompetencies] = useState<Record<string, string>>({})
   const [isExtracting, setIsExtracting] = useState(false)
   const [showIgnored, setShowIgnored] = useState(false)
 
+  const findSimilarMutation = trpc.competencies.findSimilar.useMutation()
+
+  // Helper function to check if a competency is already added to this entity
+  const isCompetencyAlreadyAdded = (competencyId: string): boolean => {
+    return existingCompetencies.some(c => c.competencyId === competencyId || c.id === competencyId || (c.competency && c.competency.id === competencyId))
+  }
+
   const extractMutation = trpc.extraction.extractCompetencies.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       // Add unique IDs to each competency to prevent re-rendering issues
       const competenciesWithIds = data.extractedCompetencies.map((comp: ExtractedCompetency, index: number) => ({
         ...comp,
@@ -89,6 +109,20 @@ export function CompetencyExtractor({
         return acc
       }, {} as Record<string, { isEditing: boolean }>)
       setEditingStates(initialEditingStates)
+      
+      // Find similar competencies for each extracted competency
+      const similarResults: Record<string, SimilarCompetency[]> = {}
+      for (const comp of competenciesWithIds) {
+        try {
+          const similar = await findSimilarMutation.mutateAsync({ name: comp.name })
+          similarResults[comp.id] = similar
+        } catch (error) {
+          console.error(`Failed to find similar competencies for ${comp.name}:`, error)
+          similarResults[comp.id] = []
+        }
+      }
+      setSimilarCompetencies(similarResults)
+      
       setIsExtracting(false)
     },
     onError: (error) => {
@@ -104,6 +138,8 @@ export function CompetencyExtractor({
     setExtractedCompetencies([])
     setCompetencyStates({})
     setEditingStates({})
+    setSimilarCompetencies({})
+    setProcessedSimilarCompetencies({})
     extractMutation.mutate({ 
       content, 
       contextMessage, 
@@ -122,35 +158,52 @@ export function CompetencyExtractor({
     }))
 
     try {
-      // First, check if competency already exists
       let competencyId: string | null = null
       
-      if (allCompetencies) {
-        const existingCompetency = allCompetencies.find(
-          c => c.name.toLowerCase() === competency.name.toLowerCase() && c.type === competency.type
-        )
-        
-        if (existingCompetency) {
-          competencyId = existingCompetency.id
-        }
+      // Check if a similar competency was already processed
+      const processedSimilarId = processedSimilarCompetencies[competency.id]
+      if (processedSimilarId) {
+        // If already processed, just mark as added without doing anything
+        setCompetencyStates(prev => ({
+          ...prev,
+          [competency.id]: { ...prev[competency.id], action: 'added' }
+        }))
+        return
       }
       
-      // If not found, create it
-      if (!competencyId) {
-        try {
-          const newCompetency = await createCompetency.mutateAsync({
-            name: competency.name,
-            type: competency.type,
-            description: competency.description,
-          })
-          competencyId = newCompetency.id
-        } catch (createError: any) {
-          if (createError.message?.includes('already exists')) {
-            throw new Error(`Competency "${competency.name}" already exists but couldn't be found. Please refresh and try again.`)
+      // First, check if competency already exists in the list
+        if (allCompetencies) {
+          const existingCompetency = allCompetencies.find(
+            c => c.name.toLowerCase() === competency.name.toLowerCase() && c.type === competency.type
+          )
+          
+          if (existingCompetency) {
+            competencyId = existingCompetency.id
           }
-          throw createError
         }
-      }
+        
+        // If not found, create it
+        if (!competencyId) {
+          try {
+            // Check if there's a similar competency with high similarity for embedding reuse
+            const similarComps = similarCompetencies[competency.id] || []
+            const highSimilarity = similarComps.find(sim => sim.similarity > 0.95 && sim.embedding)
+            
+            const newCompetency = await createCompetency.mutateAsync({
+              name: competency.name,
+              type: competency.type,
+              description: competency.description,
+              // Reuse embedding if we have a very similar competency (>95% match)
+              embedding: highSimilarity?.embedding,
+            })
+            competencyId = newCompetency.id
+          } catch (createError: any) {
+            if (createError.message?.includes('already exists')) {
+              throw new Error(`Competency "${competency.name}" already exists but couldn't be found. Please refresh and try again.`)
+            }
+            throw createError
+          }
+        }
 
       if (competencyId) {
         // Add competency to entity with selected proficiency using callback
@@ -207,6 +260,45 @@ export function CompetencyExtractor({
         isEditing: !prev[competencyId]?.isEditing
       }
     }))
+  }
+
+  const handleAddSimilarCompetency = async (competencyId: string, similarCompetencyId: string) => {
+    const state = competencyStates[competencyId]
+    if (!state || state.action !== 'pending') return
+
+    // Update state to show loading
+    setCompetencyStates(prev => ({
+      ...prev,
+      [competencyId]: { ...prev[competencyId], action: 'adding' }
+    }))
+
+    try {
+      // Add the similar competency to entity with selected proficiency
+      await onAddCompetency(similarCompetencyId, state.proficiency)
+
+      // Mark this similar competency as processed
+      setProcessedSimilarCompetencies(prev => ({
+        ...prev,
+        [competencyId]: similarCompetencyId
+      }))
+
+      // Update state to show success
+      setCompetencyStates(prev => ({
+        ...prev,
+        [competencyId]: { ...prev[competencyId], action: 'added' }
+      }))
+
+      onCompetencyAdded()
+    } catch (error: any) {
+      console.error('Failed to add similar competency:', error)
+      alert(error.message || 'Failed to add competency')
+      
+      // Reset state back to pending
+      setCompetencyStates(prev => ({
+        ...prev,
+        [competencyId]: { ...prev[competencyId], action: 'pending' }
+      }))
+    }
   }
 
   const getCompetencyTypeColor = (type: string) => {
@@ -304,11 +396,16 @@ export function CompetencyExtractor({
                   disabled={isExtracting}
                 >
                   {isExtracting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Extracting and Finding Similarities ...
+                    </>
                   ) : (
-                    <Brain className="h-4 w-4 mr-2" />
+                    <>
+                      <Brain className="h-4 w-4 mr-2" />
+                      Re-Extract
+                    </>
                   )}
-                  Re-extract
                 </Button>
               </div>
             </div>
@@ -397,7 +494,7 @@ export function CompetencyExtractor({
                         )}
                         
                         {(state.action === 'pending' || state.action === 'adding') && (
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 mb-4">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-gray-700">
                                 Proficiency Level:
@@ -426,11 +523,81 @@ export function CompetencyExtractor({
                           </div>
                         )}
 
+                        {/* Similar Competencies Section */}
+                        {(state.action === 'pending' || state.action === 'adding') && 
+                         similarCompetencies[competency.id] && 
+                         similarCompetencies[competency.id].length > 0 && 
+                         !processedSimilarCompetencies[competency.id] && (
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <AlertCircle className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium text-gray-800">
+                                Similar competencies found ({similarCompetencies[competency.id].length})
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {similarCompetencies[competency.id].map((similar) => {
+                                const isAlreadyAdded = isCompetencyAlreadyAdded(similar.id)
+                                return (
+                                  <div 
+                                    key={similar.id} 
+                                    className={`w-full flex items-start justify-between p-3 border rounded transition-colors ${
+                                      isAlreadyAdded 
+                                        ? 'border-green-300 bg-green-50' 
+                                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <div className="flex-1 min-w-0 mr-4">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`text-sm font-medium ${
+                                          isAlreadyAdded ? 'text-green-900' : 'text-gray-900'
+                                        }`}>
+                                          {similar.name}
+                                        </span>
+                                        <Badge className={getCompetencyTypeColor(similar.type)} variant="outline">
+                                          {similar.type.replace('_', ' ')}
+                                        </Badge>
+                                        <span className="text-xs text-gray-500">
+                                          {Math.round(similar.similarity * 100)}% match
+                                        </span>
+                                        {isAlreadyAdded && (
+                                          <CheckCircle className="h-4 w-4 text-green-600" />
+                                        )}
+                                      </div>
+                                      {similar.description && (
+                                        <p className={`text-xs overflow-hidden text-ellipsis ${
+                                          isAlreadyAdded ? 'text-green-700' : 'text-gray-600'
+                                        }`} style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>
+                                          {similar.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {!isAlreadyAdded && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleAddSimilarCompetency(competency.id, similar.id)}
+                                        disabled={state.action === 'adding'}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
+                                      >
+                                        Add
+                                      </Button>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {state.action === 'added' && (
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
                             <span className="text-sm text-green-700">
-                              Added with {state.proficiency} proficiency
+                              {processedSimilarCompetencies[competency.id] ? (
+                                <>Added &quot;{similarCompetencies[competency.id]?.find(s => s.id === processedSimilarCompetencies[competency.id])?.name || 'competency'}&quot; with {state.proficiency} proficiency</>
+                              ) : (
+                                <>Added with {state.proficiency} proficiency</>
+                              )}
                             </span>
                           </div>
                         )}

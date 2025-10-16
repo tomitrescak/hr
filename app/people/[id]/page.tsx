@@ -30,7 +30,7 @@ import { ImageCropper } from '@/components/ui/image-cropper'
 import CVFileUpload from '@/components/CVFileUpload'
 import { marked } from 'marked'
 import { supportsProficiency } from '@/lib/utils/competency'
-import { processCourseDescription } from '@/lib/utils'
+import { processCourseDescription, truncateText } from '@/lib/utils'
 
 interface PersonPageProps {
   params: Promise<{
@@ -104,12 +104,111 @@ export default function PersonPage({ params }: PersonPageProps) {
   const [showPhotoCropper, setShowPhotoCropper] = useState(false)
   
   
+  const utils = trpc.useUtils()
   const { data: person, isLoading, refetch } = trpc.people.getById.useQuery({ id })
   const updateMe = trpc.people.updateMe.useMutation()
   const updatePerson = trpc.people.updateById.useMutation()
   const { data: allCompetencies } = trpc.competencies.list.useQuery({})
-  const upsertCompetency = trpc.people.upsertCompetency.useMutation()
-  const removeCompetency = trpc.people.removeCompetency.useMutation()
+  const upsertCompetency = trpc.people.upsertCompetency.useMutation({
+    onMutate: async ({ personId, competencyId, proficiency }) => {
+      // Cancel outgoing refetches (so they don't overwrite our optimistic update)
+      await utils.people.getById.cancel({ id: personId })
+      
+      // Snapshot the previous value
+      const previousPerson = utils.people.getById.getData({ id: personId })
+      
+      // Optimistically update the UI
+      if (previousPerson) {
+        const existingCompetencyIndex = previousPerson.competencies.findIndex((pc: any) => 
+          pc.competency.id === competencyId
+        )
+        
+        let updatedCompetencies
+        
+        if (existingCompetencyIndex >= 0) {
+          // Update existing competency
+          updatedCompetencies = previousPerson.competencies.map((pc: any, index: number) => {
+            if (index === existingCompetencyIndex) {
+              return {
+                ...pc,
+                proficiency,
+                lastUpdatedAt: new Date().toISOString()
+              }
+            }
+            return pc
+          })
+        } else {
+          // Add new competency - need to find the competency details from allCompetencies
+          const competencyDetails = allCompetencies?.find(c => c.id === competencyId)
+          if (competencyDetails) {
+            const newPersonCompetency = {
+              id: `temp-${competencyId}`, // Temporary ID
+              personId,
+              competencyId,
+              proficiency,
+              lastUpdatedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              competency: competencyDetails
+            }
+            updatedCompetencies = [...previousPerson.competencies, newPersonCompetency]
+          } else {
+            // Fallback if competency not found in cache
+            updatedCompetencies = previousPerson.competencies
+          }
+        }
+        
+        utils.people.getById.setData({ id: personId }, {
+          ...previousPerson,
+          competencies: updatedCompetencies
+        })
+      }
+      
+      return { previousPerson }
+    },
+    onError: (err, variables, context) => {
+      // Revert the optimistic update on error
+      if (context?.previousPerson) {
+        utils.people.getById.setData({ id: variables.personId }, context.previousPerson)
+      }
+    },
+    onSettled: (data, error, variables) => {
+      // Sync with server state
+      utils.people.getById.invalidate({ id: variables.personId })
+    }
+  })
+  const removeCompetency = trpc.people.removeCompetency.useMutation({
+    onMutate: async ({ personId, competencyId }) => {
+      // Cancel outgoing refetches
+      await utils.people.getById.cancel({ id: personId })
+      
+      // Snapshot the previous value
+      const previousPerson = utils.people.getById.getData({ id: personId })
+      
+      // Optimistically remove the competency
+      if (previousPerson) {
+        const updatedCompetencies = previousPerson.competencies.filter((pc: any) => 
+          pc.competency.id !== competencyId
+        )
+        
+        utils.people.getById.setData({ id: personId }, {
+          ...previousPerson,
+          competencies: updatedCompetencies
+        })
+      }
+      
+      return { previousPerson }
+    },
+    onError: (err, variables, context) => {
+      // Revert the optimistic update on error
+      if (context?.previousPerson) {
+        utils.people.getById.setData({ id: variables.personId }, context.previousPerson)
+      }
+    },
+    onSettled: (data, error, variables) => {
+      // Sync with server state
+      utils.people.getById.invalidate({ id: variables.personId })
+    }
+  })
   const createCompetency = trpc.competencies.create.useMutation()
   const { data: tasksData } = trpc.people.getTasksForPerson.useQuery({ personId: id })
   
@@ -616,50 +715,44 @@ ${tasksMarkdown}`
     return parts.length > 0 ? parts.join(', ') : 'Less than a day'
   }
 
-  const handleAddCompetency = async (competencyId: string, proficiency?: string) => {
+  const handleAddCompetency = (competencyId: string, proficiency?: string) => {
     if (!person) return
-    try {
-      await upsertCompetency.mutateAsync({
-        personId: person.id,
-        competencyId,
-        proficiency: proficiency as any
-      })
-      setAddCompetencyOpen(false)
-      refetch()
-    } catch (error) {
-      console.error('Failed to add competency:', error)
-    }
+    
+    // Close dialog immediately for optimistic UX
+    setAddCompetencyOpen(false)
+    
+    // Fire and forget - optimistic updates handle the UI
+    upsertCompetency.mutate({
+      personId: person.id,
+      competencyId,
+      proficiency: proficiency as any
+    })
   }
 
-  const handleEditCompetency = async (competencyId: string, proficiency?: string) => {
+  const handleEditCompetency = (competencyId: string, proficiency?: string) => {
     if (!person) return
-    try {
-      await upsertCompetency.mutateAsync({
-        personId: person.id,
-        competencyId,
-        proficiency: proficiency as any
-      })
-      setEditCompetencyOpen(false)
-      setSelectedCompetency(null)
-      refetch()
-    } catch (error) {
-      console.error('Failed to update competency:', error)
-    }
+    
+    // Close dialog immediately for optimistic UX
+    setEditCompetencyOpen(false)
+    setSelectedCompetency(null)
+    
+    // Fire and forget - optimistic updates handle the UI
+    upsertCompetency.mutate({
+      personId: person.id,
+      competencyId,
+      proficiency: proficiency as any
+    })
   }
 
-  const handleRemoveCompetency = async (competencyId: string, competencyName: string) => {
+  const handleRemoveCompetency = (competencyId: string, competencyName: string) => {
     if (!person) return
     if (!confirm(`Are you sure you want to remove "${competencyName}" from ${person.name}?`)) return
     
-    try {
-      await removeCompetency.mutateAsync({
-        personId: person.id,
-        competencyId
-      })
-      refetch()
-    } catch (error) {
-      console.error('Failed to remove competency:', error)
-    }
+    // Fire and forget - optimistic updates handle the UI
+    removeCompetency.mutate({
+      personId: person.id,
+      competencyId
+    })
   }
 
   return (
@@ -1075,28 +1168,7 @@ ${tasksMarkdown}`
 
           {/* Competencies Tab */}
           <TabsContent value="competencies" className="space-y-4">
-            {/* AI Competency Extraction from CV */}
-            {person.cv && (
-              <CompetencyExtractor
-                entityId={person.id}
-                entityName={person.name}
-                content={`Person: ${person.name}\nCV Content:\n${person.cv}`}
-                contextMessage="Use AI to automatically identify and extract competencies from this person's CV content. This will analyze their experience, skills, and qualifications to suggest relevant competencies."
-                onCompetencyAdded={() => refetch()}
-                canManage={canManageCompetencies}
-                iconColor="text-blue-600"
-                buttonColor="bg-blue-600 hover:bg-blue-700"
-                onAddCompetency={async (competencyId: string, proficiency?: string) => {
-                  await upsertCompetency.mutateAsync({
-                    personId: person.id,
-                    competencyId,
-                    proficiency: proficiency as any,
-                  })
-                }}
-                createCompetency={createCompetency}
-                allCompetencies={allCompetencies || []}
-              />
-            )}
+            
             
             <div className="flex items-center justify-between">
               <div>
@@ -1211,17 +1283,6 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
-                          className="cursor-pointer select-none hover:bg-muted/50"
-                          onClick={() => handleSort('lastUpdated')}
-                        >
-                          <div className="flex items-center gap-1">
-                            Last Updated
-                            {sortBy === 'lastUpdated' && (
-                              sortDirection === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                            )}
-                          </div>
-                        </TableHead>
                         <TableHead>Description</TableHead>
                         {canManageCompetencies && <TableHead></TableHead>}
                       </TableRow>
@@ -1231,7 +1292,7 @@ ${tasksMarkdown}`
                         const showProficiencyForType = supportsProficiency(competency.type)
                         return (
                           <TableRow key={competency.id}>
-                            <TableCell className="font-medium">
+                            <TableCell className="font-medium whitespace-nowrap">
                               {competency.name}
                             </TableCell>
                             <TableCell>
@@ -1253,15 +1314,10 @@ ${tasksMarkdown}`
                                 <span className="text-muted-foreground text-sm">-</span>
                               )}
                             </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                {competency.lastUpdated.toLocaleDateString()}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground max-w-xs truncate">
-                                {competency.description || '-'}
-                              </span>
+                            <TableCell className="max-w-xs">
+                              <div className="text-sm text-muted-foreground break-words">
+                                {competency.description ? truncateText(competency.description, 150) : '-'}
+                              </div>
                             </TableCell>
                             {canManageCompetencies && (
                               <TableCell>
@@ -1315,6 +1371,24 @@ ${tasksMarkdown}`
                   )}
                 </DialogContent>
               </Dialog>
+            )}
+
+            {/* AI Competency Extraction from CV */}
+            {person.cv && (
+              <CompetencyExtractor
+                entityId={person.id}
+                entityName={person.name}
+                content={`Person: ${person.name}\nCV Content:\n${person.cv}`}
+                contextMessage="Use AI to automatically identify and extract competencies from this person's CV content. This will analyze their experience, skills, and qualifications to suggest relevant competencies."
+                onCompetencyAdded={() => {}}
+                canManage={canManageCompetencies}
+                iconColor="text-blue-600"
+                buttonColor="bg-blue-600 hover:bg-blue-700"
+                onAddCompetency={handleAddCompetency}
+                createCompetency={createCompetency}
+                allCompetencies={allCompetencies || []}
+                existingCompetencies={person.competencies || []}
+              />
             )}
           </TabsContent>
 

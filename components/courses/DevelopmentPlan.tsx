@@ -15,7 +15,7 @@ import {
   DragEndEvent,
   DragStartEvent,
   DragOverlay,
-  closestCenter,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -37,11 +37,12 @@ function DroppableArea({ id, children }: { id: string; children: React.ReactNode
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[200px] p-1 rounded-lg transition-colors ${
-        isOver ? "bg-blue-50 border-2 border-dashed border-blue-300" : ""
-      }`}
+      className={`min-h-[200px] p-1 rounded-lg transition-colors relative`}
     >
       {children}
+      {isOver && (
+        <div className="absolute inset-0 bg-blue-100/30 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none z-50" />
+      )}
     </div>
   )
 }
@@ -92,8 +93,49 @@ export function DevelopmentPlan({ personId, canManage = false }: DevelopmentPlan
   })
 
   // Mutations
+  const utils = trpc.useUtils()
   const updateEnrollmentStatus = trpc.courses.updateEnrollmentStatus.useMutation({
-    onSuccess: () => {
+    onMutate: async ({ courseId, personId: pid, status }) => {
+      const targetPersonId = pid || personId
+      await utils.courses.getDevelopmentPlan.cancel({ personId: targetPersonId })
+      
+      const previousPlan = utils.courses.getDevelopmentPlan.getData({ personId: targetPersonId })
+      
+      if (previousPlan) {
+        // Find the enrollment being moved
+        const allEnrollments = [...(previousPlan.wishlist || []), ...(previousPlan.inProgress || []), ...(previousPlan.completed || [])]
+        const enrollment = allEnrollments.find(e => e.courseId === courseId)
+        
+        if (enrollment) {
+          // Remove from old list
+          const newPlan = {
+            wishlist: previousPlan.wishlist?.filter(e => e.courseId !== courseId) || [],
+            inProgress: previousPlan.inProgress?.filter(e => e.courseId !== courseId) || [],
+            completed: previousPlan.completed?.filter(e => e.courseId !== courseId) || []
+          }
+          
+          // Add to new list with updated status
+          const updatedEnrollment = { ...enrollment, status }
+          if (status === 'WISHLIST') {
+            newPlan.wishlist.push(updatedEnrollment)
+          } else if (status === 'IN_PROGRESS') {
+            newPlan.inProgress.push({ ...updatedEnrollment, startedAt: new Date() })
+          } else if (status === 'COMPLETED') {
+            newPlan.completed.push({ ...updatedEnrollment, completedAt: new Date(), completed: true, progress: 100 })
+          }
+          
+          utils.courses.getDevelopmentPlan.setData({ personId: targetPersonId }, newPlan)
+        }
+      }
+      
+      return { previousPlan, targetPersonId }
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousPlan) {
+        utils.courses.getDevelopmentPlan.setData({ personId: context.targetPersonId }, context.previousPlan)
+      }
+    },
+    onSettled: () => {
       refetch()
     },
   })
@@ -300,7 +342,7 @@ export function DevelopmentPlan({ personId, canManage = false }: DevelopmentPlan
       {/* Development Plan Columns */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={rectIntersection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >

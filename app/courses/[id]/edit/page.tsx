@@ -528,6 +528,7 @@ ${course.content || ''}
             }}
             createCompetency={createCompetencyMutation}
             allCompetencies={allCompetencies || []}
+            existingCompetencies={course.competencies || []}
           />
         )}
 

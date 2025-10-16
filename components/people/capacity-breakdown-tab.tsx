@@ -97,7 +97,7 @@ export function CapacityBreakdownTab() {
                 <TableHead>Name</TableHead>
                 
                 <TableHead>Current Utilization</TableHead>
-                <TableHead>Project Assignments</TableHead>
+                <TableHead>Allocations</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

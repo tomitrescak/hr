@@ -46,7 +46,7 @@ const competencyTypeColors = {
 }
 
 interface CreateCourseFormProps {
-  onSuccess?: () => void
+  onSuccess?: (courseId: string) => void
 }
 
 export function CreateCourseForm({ onSuccess }: CreateCourseFormProps) {
@@ -80,13 +80,13 @@ export function CreateCourseForm({ onSuccess }: CreateCourseFormProps) {
   const { data: allCourses } = trpc.courses.list.useQuery()
 
   const createMutation = trpc.courses.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       reset()
       setSelectedCompetencies([])
       setSelectedSpecialisationCourses([])
       setDescriptionLength(0)
       setCourseType('COURSE')
-      onSuccess?.()
+      onSuccess?.(data.id)
     },
     onError: (error) => {
       alert(error.message || 'Failed to create course')

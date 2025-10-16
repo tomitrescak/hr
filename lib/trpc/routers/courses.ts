@@ -812,8 +812,13 @@ export const coursesRouter = router({
 
       // If moved to completed, add course competencies to person
       if (input.status === 'COMPLETED' && enrollment.status !== 'COMPLETED') {
+        console.log(`Adding competencies for completed course: ${enrollment.course.id} to person: ${personId}`)
+        console.log(`Course has ${enrollment.course.competencies.length} competencies`)
+        
         for (const courseComp of enrollment.course.competencies) {
           const competency = courseComp.competency
+          
+          console.log(`Processing competency: ${competency.name} (${competency.type})`)
           
           // Check if person already has this competency
           const existingPersonComp = await ctx.db.personCompetency.findUnique({
@@ -825,34 +830,43 @@ export const coursesRouter = router({
             },
           })
 
-          // Determine proficiency level for new competencies
-          const defaultProficiency = {
-            'SKILL': 'INTERMEDIATE',
-            'TECH_TOOL': 'INTERMEDIATE', 
-            'ABILITY': 'INTERMEDIATE',
-            'KNOWLEDGE': 'INTERMEDIATE',
-            'VALUE': 'INTERMEDIATE',
-            'BEHAVIOUR': 'INTERMEDIATE',
-            'ENABLER': 'INTERMEDIATE',
-          }[competency.type] as any
+          // Use the course's proficiency level if available, otherwise default
+          let targetProficiency = courseComp.proficiency
+          if (!targetProficiency) {
+            // Determine proficiency level for new competencies
+            const defaultProficiency = {
+              'SKILL': 'INTERMEDIATE',
+              'TECH_TOOL': 'INTERMEDIATE', 
+              'ABILITY': 'INTERMEDIATE',
+              'KNOWLEDGE': 'INTERMEDIATE',
+              'VALUE': 'INTERMEDIATE',
+              'BEHAVIOUR': 'INTERMEDIATE',
+              'ENABLER': 'INTERMEDIATE',
+            }[competency.type] as any
+            targetProficiency = defaultProficiency
+          }
 
-          if (!existingPersonComp && defaultProficiency) {
+          if (!existingPersonComp && targetProficiency) {
             // Add new competency
+            console.log(`Adding new competency: ${competency.name} with proficiency: ${targetProficiency}`)
             await ctx.db.personCompetency.create({
               data: {
                 personId,
                 competencyId: competency.id,
-                proficiency: defaultProficiency,
+                proficiency: targetProficiency,
                 lastUpdatedAt: new Date(),
               },
             })
-          } else if (existingPersonComp && defaultProficiency) {
+          } else if (existingPersonComp && targetProficiency) {
             // Update only if the new proficiency is higher
             const proficiencyLevels = { 'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4 }
             const currentLevel = proficiencyLevels[existingPersonComp.proficiency as keyof typeof proficiencyLevels] || 0
-            const newLevel = proficiencyLevels[defaultProficiency as keyof typeof proficiencyLevels] || 0
+            const newLevel = proficiencyLevels[targetProficiency as keyof typeof proficiencyLevels] || 0
+            
+            console.log(`Existing competency: ${competency.name}, current: ${existingPersonComp.proficiency} (${currentLevel}), target: ${targetProficiency} (${newLevel})`)
             
             if (newLevel > currentLevel) {
+              console.log(`Updating competency: ${competency.name} from ${existingPersonComp.proficiency} to ${targetProficiency}`)
               await ctx.db.personCompetency.update({
                 where: {
                   personId_competencyId: {
@@ -861,13 +875,18 @@ export const coursesRouter = router({
                   },
                 },
                 data: {
-                  proficiency: defaultProficiency,
+                  proficiency: targetProficiency,
                   lastUpdatedAt: new Date(),
                 },
               })
+            } else {
+              console.log(`Keeping existing higher proficiency: ${existingPersonComp.proficiency}`)
             }
+          } else {
+            console.log(`Skipping competency: ${competency.name} - no target proficiency determined`)
           }
         }
+        console.log(`Finished adding competencies for course completion`)
       }
 
       return updatedEnrollment
@@ -902,6 +921,17 @@ export const coursesRouter = router({
             personId,
           },
         },
+        include: {
+          course: {
+            include: {
+              competencies: {
+                include: {
+                  competency: true,
+                },
+              },
+            },
+          },
+        },
       })
 
       if (!enrollment) {
@@ -917,6 +947,7 @@ export const coursesRouter = router({
       if (input.progress !== undefined) updates.progress = input.progress
 
       // Auto-complete if progress reaches 100%
+      const wasNotCompleted = !enrollment.completed
       if (input.progress === 100 && !updates.completedAt) {
         updates.completed = true
         updates.completedAt = new Date()
@@ -941,6 +972,85 @@ export const coursesRouter = router({
           },
         },
       })
+
+      // If auto-completed via progress = 100%, add competencies to person profile
+      if (updates.completed && wasNotCompleted) {
+        console.log(`Auto-completed course via progress 100% - adding competencies for course: ${enrollment.course.id} to person: ${personId}`)
+        console.log(`Course has ${enrollment.course.competencies.length} competencies`)
+        
+        for (const courseComp of enrollment.course.competencies) {
+          const competency = courseComp.competency
+          
+          console.log(`Processing competency: ${competency.name} (${competency.type})`)
+          
+          // Check if person already has this competency
+          const existingPersonComp = await ctx.db.personCompetency.findUnique({
+            where: {
+              personId_competencyId: {
+                personId,
+                competencyId: competency.id,
+              },
+            },
+          })
+
+          // Use the course's proficiency level if available, otherwise default
+          let targetProficiency = courseComp.proficiency
+          if (!targetProficiency) {
+            // Determine proficiency level for new competencies
+            const defaultProficiency = {
+              'SKILL': 'INTERMEDIATE',
+              'TECH_TOOL': 'INTERMEDIATE', 
+              'ABILITY': 'INTERMEDIATE',
+              'KNOWLEDGE': 'INTERMEDIATE',
+              'VALUE': 'INTERMEDIATE',
+              'BEHAVIOUR': 'INTERMEDIATE',
+              'ENABLER': 'INTERMEDIATE',
+            }[competency.type] as any
+            targetProficiency = defaultProficiency
+          }
+
+          if (!existingPersonComp && targetProficiency) {
+            // Add new competency
+            console.log(`Adding new competency: ${competency.name} with proficiency: ${targetProficiency}`)
+            await ctx.db.personCompetency.create({
+              data: {
+                personId,
+                competencyId: competency.id,
+                proficiency: targetProficiency,
+                lastUpdatedAt: new Date(),
+              },
+            })
+          } else if (existingPersonComp && targetProficiency) {
+            // Update only if the new proficiency is higher
+            const proficiencyLevels = { 'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4 }
+            const currentLevel = proficiencyLevels[existingPersonComp.proficiency as keyof typeof proficiencyLevels] || 0
+            const newLevel = proficiencyLevels[targetProficiency as keyof typeof proficiencyLevels] || 0
+            
+            console.log(`Existing competency: ${competency.name}, current: ${existingPersonComp.proficiency} (${currentLevel}), target: ${targetProficiency} (${newLevel})`)
+            
+            if (newLevel > currentLevel) {
+              console.log(`Updating competency: ${competency.name} from ${existingPersonComp.proficiency} to ${targetProficiency}`)
+              await ctx.db.personCompetency.update({
+                where: {
+                  personId_competencyId: {
+                    personId,
+                    competencyId: competency.id,
+                  },
+                },
+                data: {
+                  proficiency: targetProficiency,
+                  lastUpdatedAt: new Date(),
+                },
+              })
+            } else {
+              console.log(`Keeping existing higher proficiency: ${existingPersonComp.proficiency}`)
+            }
+          } else {
+            console.log(`Skipping competency: ${competency.name} - no target proficiency determined`)
+          }
+        }
+        console.log(`Finished adding competencies for auto-completed course`)
+      }
 
       return updatedEnrollment
     }),

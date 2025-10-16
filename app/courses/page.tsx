@@ -22,20 +22,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { CreateCourseForm } from '@/components/courses/CreateCourseForm'
 import { AppLayout } from '@/components/layout/app-layout'
 import { processCourseDescription } from '@/lib/utils'
 
@@ -44,7 +35,6 @@ export default function CoursesPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   const {
     data: courses,
@@ -115,25 +105,10 @@ export default function CoursesPage() {
           </p>
         </div>
         {canManage && (
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Course
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create New Course</DialogTitle>
-              </DialogHeader>
-              <CreateCourseForm
-                onSuccess={() => {
-                  setCreateDialogOpen(false)
-                  refetch()
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => router.push('/courses/add')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Course
+          </Button>
         )}
       </div>
 

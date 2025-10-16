@@ -140,8 +140,22 @@ model Competency {
   // Relations
   personCompetencies PersonCompetency[]
   courseCompetencies CourseCompetency[]
+  embeddings         CompetencyEmbedding?
 
   @@map("competencies")
+}
+
+model CompetencyEmbedding {
+  id            String   @id @default(uuid())
+  competencyId  String   @unique
+  embedding     Float[]  // Array of floats for vector embedding
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@map("competency_embeddings")
 }
 
 model PersonCompetency {

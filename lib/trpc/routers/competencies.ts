@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
+import { generateEmbedding, findSimilarCompetencies } from '@/lib/services/embedding'
 
 export const competenciesRouter = router({
   // Get all competencies (anyone can view)
@@ -28,6 +29,7 @@ export const competenciesRouter = router({
               },
             },
           },
+          embeddings: true,
           _count: {
             select: {
               personCompetencies: true,
@@ -82,6 +84,7 @@ export const competenciesRouter = router({
         type: z.enum(['KNOWLEDGE', 'SKILL', 'TECH_TOOL', 'ABILITY', 'VALUE', 'BEHAVIOUR', 'ENABLER']),
         name: z.string().min(2),
         description: z.string().optional(),
+        embedding: z.array(z.number()).optional(), // Existing embedding to avoid regeneration
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -100,9 +103,12 @@ export const competenciesRouter = router({
         })
       }
 
+      const { embedding: providedEmbedding, ...competencyData } = input
+      
       const competency = await ctx.db.competency.create({
-        data: input,
+        data: competencyData,
         include: {
+          embeddings: true,
           _count: {
             select: {
               personCompetencies: true,
@@ -111,6 +117,20 @@ export const competenciesRouter = router({
           },
         },
       })
+
+      // Use provided embedding or generate new one
+      try {
+        const embedding = providedEmbedding || await generateEmbedding(competency.name)
+        await ctx.db.competencyEmbedding.create({
+          data: {
+            competencyId: competency.id,
+            embedding,
+          },
+        })
+      } catch (embeddingError) {
+        console.error('Failed to create embedding for competency:', embeddingError)
+        // Don't fail the competency creation if embedding fails
+      }
 
       // Create change log
       await ctx.db.changeLog.create({
@@ -178,6 +198,7 @@ export const competenciesRouter = router({
         where: { id },
         data: filteredUpdates,
         include: {
+          embeddings: true,
           _count: {
             select: {
               personCompetencies: true,
@@ -186,6 +207,24 @@ export const competenciesRouter = router({
           },
         },
       })
+
+      // If name was changed, update the embedding
+      if (filteredUpdates.name) {
+        try {
+          const embedding = await generateEmbedding(competency.name)
+          await ctx.db.competencyEmbedding.upsert({
+            where: { competencyId: id },
+            update: { embedding },
+            create: {
+              competencyId: id,
+              embedding,
+            },
+          })
+        } catch (embeddingError) {
+          console.error('Failed to update embedding for competency:', embeddingError)
+          // Don't fail the competency update if embedding fails
+        }
+      }
 
       // Create change log
       await ctx.db.changeLog.create({
@@ -315,6 +354,19 @@ export const competenciesRouter = router({
             data: competencyData,
           })
 
+          // Generate and store embedding
+          try {
+            const embedding = await generateEmbedding(competency.name)
+            await ctx.db.competencyEmbedding.create({
+              data: {
+                competencyId: competency.id,
+                embedding,
+              },
+            })
+          } catch (embeddingError) {
+            console.error('Failed to generate embedding for competency:', competency.name, embeddingError)
+          }
+
           results.created.push(competency)
 
           // Create change log
@@ -334,5 +386,58 @@ export const competenciesRouter = router({
       }
 
       return results
+    }),
+
+  // Find similar competencies based on name embedding
+  findSimilar: pmProcedure
+    .input(
+      z.object({
+        name: z.string().min(1),
+        threshold: z.number().min(0).max(1).default(0.75),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Generate embedding for the input name
+        const targetEmbedding = await generateEmbedding(input.name)
+
+        // Get all competencies with their embeddings
+        const competenciesWithEmbeddings = await ctx.db.competency.findMany({
+          include: {
+            embeddings: true,
+          },
+          where: {
+            embeddings: {
+              isNot: null,
+            },
+          },
+        })
+
+        // Filter out competencies without embeddings and format data
+        const competencyEmbeddings = competenciesWithEmbeddings
+          .filter(comp => comp.embeddings?.embedding)
+          .map(comp => ({
+            id: comp.id,
+            name: comp.name,
+            type: comp.type,
+            description: comp.description || undefined,
+            embedding: comp.embeddings!.embedding,
+          }))
+
+        // Find similar competencies
+        const similarCompetencies = findSimilarCompetencies(
+          targetEmbedding,
+          competencyEmbeddings,
+          input.threshold
+        )
+
+        return similarCompetencies
+      } catch (error) {
+        console.error('Error finding similar competencies:', error)
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to find similar competencies',
+        })
+      }
     }),
 })
