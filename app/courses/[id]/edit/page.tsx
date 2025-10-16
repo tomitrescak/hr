@@ -348,12 +348,7 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                     <SelectItem value="SPECIALISATION">Specialisation</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  {courseType === 'COURSE' 
-                    ? 'A standalone course with its own content and competencies'
-                    : 'A collection of multiple courses that form a learning path'
-                  }
-                </p>
+                
               </div>
 
               {/* Course URL */}
@@ -368,9 +363,7 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                 {errors.url && (
                   <p className="text-sm text-destructive">{errors.url.message}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  External link to the course content (optional)
-                </p>
+                
               </div>
 
               <div className="space-y-2">
@@ -394,14 +387,8 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                     }
                   })}
                 />
-                {descriptionLength > 150 && (
-                  <p className="text-sm text-destructive">
-                    Description is too long. Current: {descriptionLength} characters, limit: 150 characters (after markdown processing)
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Markdown formatting will be automatically removed in course cards
-                </p>
+                
+                
               </div>
 
               {/* Course Content - Only for regular courses */}

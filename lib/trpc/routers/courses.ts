@@ -1094,4 +1094,76 @@ export const coursesRouter = router({
 
       return { success: true }
     }),
+
+  // Search courses by competencies
+  searchByCompetencies: protectedProcedure
+    .input(
+      z.object({
+        competencyIds: z.array(z.string()).min(1),
+        minMatchPercentage: z.number().min(0).max(100).default(75),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { competencyIds, minMatchPercentage } = input
+
+      // Get all courses with their competencies
+      const coursesWithCompetencies = await ctx.db.course.findMany({
+        include: {
+          competencies: {
+            include: {
+              competency: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            },
+          },
+          _count: {
+            select: {
+              enrollments: true,
+              competencies: true,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      })
+
+      // Filter and calculate match percentages
+      const results = coursesWithCompetencies
+        .map((course) => {
+          const courseCompetencyIds = course.competencies.map(cc => cc.competency.id)
+          const matchingCompetencyIds = competencyIds.filter(id => courseCompetencyIds.includes(id))
+          const matchPercentage = Math.round((matchingCompetencyIds.length / competencyIds.length) * 100)
+
+          if (matchPercentage < minMatchPercentage) {
+            return null
+          }
+
+          const matchingCompetencies = course.competencies
+            .filter(cc => competencyIds.includes(cc.competency.id))
+            .map(cc => ({
+              ...cc.competency,
+              proficiency: cc.proficiency,
+            }))
+
+          return {
+            id: course.id,
+            name: course.name,
+            description: course.description,
+            type: course.type,
+            duration: course.duration,
+            url: course.url,
+            matchPercentage,
+            matchingCompetencies,
+            totalCompetencies: course.competencies.length,
+            totalEnrollments: course._count.enrollments,
+          }
+        })
+        .filter((course): course is NonNullable<typeof course> => course !== null)
+        .sort((a, b) => b.matchPercentage - a.matchPercentage) // Sort by match percentage descending
+
+      return results
+    }),
 })

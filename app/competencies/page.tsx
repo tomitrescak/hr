@@ -28,6 +28,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CreateCompetencyForm } from '@/components/competencies/CreateCompetencyForm'
+import { CompetencySearch } from '@/components/competencies/CompetencySearch'
+import { CourseResultsTable } from '@/components/competencies/CourseResultsTable'
 import { AppLayout } from '@/components/layout/app-layout'
 
 const competencyTypeColors = {
@@ -48,11 +50,9 @@ export default function CompetenciesPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [view, setView] = useViewPreference('competencies-view', 'cards')
   
-  // People search state
-  const [competencySearchTerm, setCompetencySearchTerm] = useState('')
+  // Search state for both people and courses
   const [selectedCompetencies, setSelectedCompetencies] = useState<Array<{id: string, name: string, type: string}>>([])  
   const [activeTab, setActiveTab] = useState('competencies')
-  const [peopleSearchTypeFilter, setPeopleSearchTypeFilter] = useState<string>('all')
   
   // Sorting state
   const [sortField, setSortField] = useState<'name' | 'type' | 'description' | 'people' | 'courses'>('name')
@@ -69,6 +69,16 @@ export default function CompetenciesPage() {
   const { data: stats } = trpc.competencies.getStats.useQuery()
   
   const { data: peopleResults, isLoading: peopleLoading } = trpc.people.searchByCompetencies.useQuery(
+    {
+      competencyIds: selectedCompetencies.map(c => c.id),
+      minMatchPercentage: 75,
+    },
+    {
+      enabled: selectedCompetencies.length > 0,
+    }
+  )
+
+  const { data: courseResults, isLoading: coursesLoading } = trpc.courses.searchByCompetencies.useQuery(
     {
       competencyIds: selectedCompetencies.map(c => c.id),
       minMatchPercentage: 75,
@@ -127,14 +137,6 @@ export default function CompetenciesPage() {
       }
     })
   })()
-  
-  // Filter competencies for search (exclude already selected ones)
-  const searchableCompetencies = competencies?.filter((competency) => {
-    const matchesSearch = competencySearchTerm === '' || competency.name.toLowerCase().includes(competencySearchTerm.toLowerCase())
-    const matchesType = peopleSearchTypeFilter === 'all' || competency.type === peopleSearchTypeFilter
-    const notSelected = !selectedCompetencies.some(selected => selected.id === competency.id)
-    return matchesSearch && matchesType && notSelected
-  }) || []
 
   const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete the competency "${name}"?`)) {
@@ -148,7 +150,6 @@ export default function CompetenciesPage() {
   
   const handleAddCompetency = (competency: {id: string, name: string, type: string}) => {
     setSelectedCompetencies(prev => [...prev, competency])
-    setCompetencySearchTerm('')
   }
   
   const handleRemoveCompetency = (competencyId: string) => {
@@ -236,6 +237,7 @@ export default function CompetenciesPage() {
         <TabsList>
           <TabsTrigger value="competencies">All Competencies</TabsTrigger>
           <TabsTrigger value="find-people">Find People</TabsTrigger>
+          <TabsTrigger value="find-courses">Find Courses</TabsTrigger>
         </TabsList>
         
         <TabsContent value="competencies" className="space-y-6">
@@ -544,131 +546,14 @@ export default function CompetenciesPage() {
         </TabsContent>
         <TabsContent value="find-people" className="space-y-6">
           {/* Competency Search */}
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Find People by Skills</h2>
-              <p className="text-muted-foreground mb-4">
-                Search for competencies and add them to find people who have these skills
-              </p>
-            </div>
-            
-            {/* Type Filter */}
-            <div className="flex items-center gap-4">
-              <label htmlFor="type-filter" className="text-sm font-medium">
-                Filter by type:
-              </label>
-              <Select value={peopleSearchTypeFilter} onValueChange={setPeopleSearchTypeFilter}>
-                <SelectTrigger className="w-48">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filter by type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="KNOWLEDGE">Knowledge</SelectItem>
-                  <SelectItem value="SKILL">Skill</SelectItem>
-                  <SelectItem value="TECH_TOOL">Tech Tool</SelectItem>
-                  <SelectItem value="ABILITY">Ability</SelectItem>
-                  <SelectItem value="VALUE">Value</SelectItem>
-                  <SelectItem value="BEHAVIOUR">Behaviour</SelectItem>
-                  <SelectItem value="ENABLER">Enabler</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Search for competencies - Combined Input and Results */}
-            <div className="relative">
-              <div className="border rounded-md bg-background shadow-sm">
-                {/* Search Input */}
-                <div className="relative border-b">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    placeholder="Search for competencies to add..."
-                    value={competencySearchTerm}
-                    onChange={(e) => setCompetencySearchTerm(e.target.value)}
-                    className="pl-10 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-b-none"
-                  />
-                </div>
-                
-                {/* Search Results */}
-                {searchableCompetencies.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto">
-                    <div className="p-1">
-                      {searchableCompetencies.slice(0, 10).map((competency, index) => (
-                        <button
-                          key={competency.id}
-                          onClick={() => handleAddCompetency({
-                            id: competency.id,
-                            name: competency.name,
-                            type: competency.type
-                          })}
-                          className={`w-full text-left p-2 hover:bg-muted rounded flex items-center justify-between transition-colors ${
-                            index === 0 ? 'rounded-t-none' : ''
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <span className="font-medium">{competency.name}</span>
-                            {competency.description && (
-                              <p className="text-sm text-muted-foreground truncate pr-2">{competency.description}</p>
-                            )}
-                          </div>
-                          <Badge 
-                            variant="secondary" 
-                            className={`${competencyTypeColors[competency.type]} flex-shrink-0`}
-                          >
-                            {competency.type.replace('_', ' ')}
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* No results message */}
-                {searchableCompetencies.length === 0 && competencySearchTerm && (
-                  <div className="p-4 text-center text-muted-foreground text-sm">
-                    No competencies found matching &quot;{competencySearchTerm}&quot;
-                    {peopleSearchTypeFilter !== 'all' && (
-                      <span> in {peopleSearchTypeFilter.replace('_', ' ').toLowerCase()} category</span>
-                    )}
-                  </div>
-                )}
-                
-                {/* Empty state when no search term */}
-                {searchableCompetencies.length === 0 && !competencySearchTerm && (
-                  <div className="p-4 text-center text-muted-foreground text-sm">
-                    {peopleSearchTypeFilter === 'all' 
-                      ? 'All competencies are already selected or no competencies available'
-                      : `No ${peopleSearchTypeFilter.replace('_', ' ').toLowerCase()} competencies available to add`
-                    }
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Selected competencies */}
-            {selectedCompetencies.length > 0 && (
-              <div>
-                <h3 className="font-medium mb-2">Selected Skills ({selectedCompetencies.length})</h3>
-                <div className="flex flex-wrap gap-2">
-                  {selectedCompetencies.map((competency) => (
-                    <Badge
-                      key={competency.id}
-                      variant="secondary"
-                      className="flex items-center gap-1 px-3 py-1"
-                    >
-                      {competency.name}
-                      <button
-                        onClick={() => handleRemoveCompetency(competency.id)}
-                        className="ml-1 hover:bg-black/10 rounded-full p-0.5"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <CompetencySearch
+            competencies={competencies || []}
+            selectedCompetencies={selectedCompetencies}
+            onAddCompetency={handleAddCompetency}
+            onRemoveCompetency={handleRemoveCompetency}
+            title="Find People by Skills"
+            subtitle="Search for competencies and add them to find people who have these skills"
+          />
           
           {/* People Results */}
           {selectedCompetencies.length > 0 && (
@@ -695,71 +580,97 @@ export default function CompetenciesPage() {
                   ))}
                 </div>
               ) : peopleResults && peopleResults.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {peopleResults.map((person) => (
-                    <Card key={person.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <button
-                              onClick={() => router.push(`/people/${person.id}`)}
-                              className="text-left"
-                            >
-                              <CardTitle className="text-lg hover:underline">
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Match</TableHead>
+                          <TableHead>Matching Skills</TableHead>
+                          <TableHead>Entry Date</TableHead>
+                          <TableHead>Total Skills</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {peopleResults.map((person) => (
+                          <TableRow key={person.id} className="hover:bg-muted/50">
+                            <TableCell className="font-medium">
+                              <button
+                                onClick={() => router.push(`/people/${person.id}`)}
+                                className="text-left hover:underline"
+                              >
                                 {person.name}
-                              </CardTitle>
-                            </button>
-                            <p className="text-sm text-muted-foreground">{person.email}</p>
-                          </div>
-                          <div className="flex items-center">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Badge 
-                                    variant={person.matchPercentage === 100 ? 'default' : 'secondary'}
-                                    className="ml-2"
-                                  >
-                                    {person.matchPercentage}%
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <div className="p-2">
-                                    <p className="font-medium mb-2">
-                                      Has {person.matchingCompetencies.length} of {selectedCompetencies.length} skills:
-                                    </p>
-                                    <ul className="text-xs space-y-1">
-                                      {person.matchingCompetencies.map((comp) => (
-                                        <li key={comp.id} className="flex items-center gap-2">
-                                          <span>{comp.name}</span>
+                              </button>
+                            </TableCell>
+                            <TableCell>{person.email}</TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant={person.matchPercentage === 100 ? 'default' : 'secondary'}
+                              >
+                                {person.matchPercentage}%
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex flex-wrap gap-1 max-w-xs cursor-help">
+                                      {person.matchingCompetencies.slice(0, 3).map((comp) => (
+                                        <Badge key={comp.id} variant="outline" className="text-xs">
+                                          {comp.name}
                                           {comp.proficiency && (
-                                            <Badge variant="outline" className="text-xs py-0">
-                                              {comp.proficiency}
-                                            </Badge>
+                                            <span className="ml-1 text-muted-foreground">
+                                              ({comp.proficiency})
+                                            </span>
                                           )}
-                                        </li>
+                                        </Badge>
                                       ))}
-                                    </ul>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="flex items-center justify-between text-sm text-muted-foreground">
-                          <div className="flex items-center">
-                            <User className="h-4 w-4 mr-1" />
-                            <span>Started {new Date(person.entryDate).toLocaleDateString()}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <span>{person.totalCompetencies} total skills</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                                      {person.matchingCompetencies.length > 3 && (
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                                          +{person.matchingCompetencies.length - 3} more
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-sm">
+                                    <div className="p-2">
+                                      <p className="font-medium mb-2">
+                                        Has {person.matchingCompetencies.length} of {selectedCompetencies.length} selected skills:
+                                      </p>
+                                      <div className="grid gap-1 max-h-32 overflow-y-auto">
+                                        {person.matchingCompetencies.map((comp) => (
+                                          <div key={comp.id} className="flex items-center justify-between text-xs">
+                                            <span>{comp.name}</span>
+                                            {comp.proficiency && (
+                                              <Badge variant="outline" className="text-xs py-0">
+                                                {comp.proficiency}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <User className="h-4 w-4 mr-1" />
+                                {new Date(person.entryDate).toLocaleDateString()}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">{person.totalCompetencies}</span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
               ) : (
                 <Card>
                   <CardContent className="text-center py-8 text-muted-foreground">
@@ -775,6 +686,47 @@ export default function CompetenciesPage() {
               <CardContent className="text-center py-12 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Search for and select competencies above to find people with those skills</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        <TabsContent value="find-courses" className="space-y-6">
+          {/* Competency Search */}
+          <CompetencySearch
+            competencies={competencies || []}
+            selectedCompetencies={selectedCompetencies}
+            onAddCompetency={handleAddCompetency}
+            onRemoveCompetency={handleRemoveCompetency}
+            title="Find Courses by Skills"
+            subtitle="Search for competencies and add them to find courses that teach these skills"
+          />
+          
+          {/* Course Results */}
+          {selectedCompetencies.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">
+                  Course Results {courseResults ? `(${courseResults.length})` : ''}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Showing courses with at least 75% of selected skills
+                </p>
+              </div>
+              
+              <CourseResultsTable
+                results={courseResults || []}
+                selectedCompetencies={selectedCompetencies}
+                isLoading={coursesLoading}
+              />
+            </div>
+          )}
+          
+          {selectedCompetencies.length === 0 && (
+            <Card>
+              <CardContent className="text-center py-12 text-muted-foreground">
+                <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Search for and select competencies above to find courses that teach those skills</p>
               </CardContent>
             </Card>
           )}
