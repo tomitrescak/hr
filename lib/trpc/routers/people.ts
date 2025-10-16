@@ -15,6 +15,7 @@ export const peopleRouter = router({
         password: z.string().min(6),
         role: z.enum(['USER', 'PROJECT_MANAGER']).default('USER'),
         entryDate: z.string().datetime().optional(),
+        capacity: z.number().int().min(0).max(100).default(100),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -53,6 +54,7 @@ export const peopleRouter = router({
             email: input.email,
             role: input.role as Role,
             entryDate,
+            capacity: input.capacity,
           },
           include: {
             user: {
@@ -307,30 +309,42 @@ export const peopleRouter = router({
             competency: true,
           },
         },
-        assignments: {
+        projectAllocations: {
           include: {
             project: {
               select: { id: true, name: true },
             },
-            course: {
-              select: { id: true, name: true },
-            },
           },
           orderBy: { createdAt: 'desc' },
-          take: 5,
         },
         _count: {
           select: {
             competencies: true,
-            assignments: true,
-            reviews: true,
+            projectAllocations: true,
           },
         },
       },
       orderBy: { name: 'asc' },
     })
 
-    return people
+    // Calculate capacity utilization for each person
+    const peopleWithCapacity = people.map(person => {
+      const activeAllocations = person.projectAllocations
+      const totalAllocatedCapacity = activeAllocations.reduce(
+        (sum, allocation) => sum + allocation.capacityAllocation, 
+        0
+      )
+      const capacityUtilization = person.capacity > 0 ? Math.round((totalAllocatedCapacity / person.capacity) * 100) : 0
+      
+      return {
+        ...person,
+        totalAllocatedCapacity,
+        capacityUtilization,
+        isOverCapacity: capacityUtilization > 100,
+      }
+    })
+
+    return peopleWithCapacity
   }),
 
   // Get person by ID
@@ -357,31 +371,13 @@ export const peopleRouter = router({
               competency: { type: 'asc' },
             },
           },
-          assignments: {
+          projectAllocations: {
             include: {
               project: {
                 select: { id: true, name: true, description: true },
               },
-              course: {
-                select: { id: true, name: true, description: true },
-              },
             },
-            orderBy: { startDate: 'desc' },
-          },
-          reviews: {
-            include: {
-              assignment: {
-                select: {
-                  id: true,
-                  type: true,
-                  project: { select: { name: true } },
-                  course: { select: { name: true } },
-                },
-              },
-              competencyDeltas: true,
-            },
-            orderBy: { submittedAt: 'desc' },
-            take: 10,
+            orderBy: { createdAt: 'desc' },
           },
           taskAssignments: {
             include: {
@@ -391,14 +387,6 @@ export const peopleRouter = router({
             },
             orderBy: { createdAt: 'desc' },
             take: 10,
-          },
-          projectResponsibilities: {
-            include: {
-              project: {
-                select: { id: true, name: true },
-              },
-            },
-            orderBy: { createdAt: 'desc' },
           },
           courseEnrollments: {
             include: {

@@ -9,14 +9,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { trpc } from "@/lib/trpc/client"
 import Link from "next/link"
 import { Role } from "@prisma/client"
-import { Users, Plus, Filter } from "lucide-react"
+import { Users, Plus, Filter, BarChart3 } from "lucide-react"
 import { AddPersonDialog } from "@/components/people/add-person-dialog"
 import { PersonActionsMenu } from "@/components/people/person-actions-menu"
 import { SortableTableHeader, type SortDirection } from "@/components/ui/sortable-table-header"
 import { useStatusFilter } from "@/lib/use-status-filter"
+import { CapacityBreakdownTab } from "@/components/people/capacity-breakdown-tab"
 
 type SortConfig = {
   key: string | null
@@ -86,12 +88,12 @@ export default function PeoplePage() {
             bValue = b._count?.competencies || 0
             break
           case 'assignments':
-            aValue = a._count?.assignments || 0
-            bValue = b._count?.assignments || 0
+            aValue = a._count?.projectAllocations || 0
+            bValue = b._count?.projectAllocations || 0
             break
-          case 'reviews':
-            aValue = a._count?.reviews || 0
-            bValue = b._count?.reviews || 0
+          case 'capacity':
+            aValue = a.capacityUtilization || 0
+            bValue = b.capacityUtilization || 0
             break
           default:
             return 0
@@ -152,148 +154,204 @@ export default function PeoplePage() {
           <AddPersonDialog />
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  All People
-                  <Badge variant="secondary">{sortedAndFilteredPeople.length}</Badge>
-                  {statusFilter !== 'all' && (
-                    <Badge variant="outline" className="capitalize">
-                      {statusFilter}
-                    </Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>List of all users in the system</CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
-                  <SelectTrigger className="w-32">
-                    <Filter className="h-4 w-4 mr-1" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!sortedAndFilteredPeople || sortedAndFilteredPeople.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                {statusFilter === 'all' ? 'No people found' : `No ${statusFilter} people found`}
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableTableHeader 
-                      sortKey="status" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Status
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="name" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Name
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="email" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Email
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="role" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Role
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="competencies" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Competencies
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="assignments" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Assignments
-                    </SortableTableHeader>
-                    <SortableTableHeader 
-                      sortKey="reviews" 
-                      currentSort={sortConfig} 
-                      onSort={handleSort}
-                    >
-                      Reviews
-                    </SortableTableHeader>
-                    {isManager && <TableHead className="text-right">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedAndFilteredPeople.map((person) => (
-                    <TableRow key={person.id} className={!person.isActive ? 'opacity-60' : ''}>
-                      <TableCell>
-                        <Badge 
-                          variant={person.isActive ? "default" : "secondary"}
-                          className={person.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}
-                        >
-                          {person.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <Link href={`/people/${person.id}`} className="hover:underline font-medium">
-                            {person.name}
-                          </Link>
-                          {person.alternativeEmail && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Alt: {person.alternativeEmail}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{person.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
-                          {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{person._count?.competencies || 0}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{person._count?.assignments || 0}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{person._count?.reviews || 0}</Badge>
-                      </TableCell>
-                      {isManager && (
-                        <TableCell className="text-right">
-                          <PersonActionsMenu person={person} />
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="capacity" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Capacity Breakdown
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview">
+            <PeopleOverviewTab 
+              sortedAndFilteredPeople={sortedAndFilteredPeople}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              sortConfig={sortConfig}
+              handleSort={handleSort}
+              isManager={isManager}
+            />
+          </TabsContent>
+
+          <TabsContent value="capacity">
+            <CapacityBreakdownTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
+  )
+}
+
+interface PeopleOverviewTabProps {
+  sortedAndFilteredPeople: any[]
+  statusFilter: string
+  setStatusFilter: (filter: 'all' | 'active' | 'inactive') => void
+  sortConfig: SortConfig
+  handleSort: (key: string, direction: SortDirection) => void
+  isManager: boolean
+}
+
+function PeopleOverviewTab({ 
+  sortedAndFilteredPeople, 
+  statusFilter, 
+  setStatusFilter, 
+  sortConfig, 
+  handleSort, 
+  isManager 
+}: PeopleOverviewTabProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              All People
+              <Badge variant="secondary">{sortedAndFilteredPeople.length}</Badge>
+              {statusFilter !== 'all' && (
+                <Badge variant="outline" className="capitalize">
+                  {statusFilter}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>List of all users in the system</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+              <SelectTrigger className="w-32">
+                <Filter className="h-4 w-4 mr-1" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {!sortedAndFilteredPeople || sortedAndFilteredPeople.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {statusFilter === 'all' ? 'No people found' : `No ${statusFilter} people found`}
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTableHeader 
+                  sortKey="status" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Status
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="name" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Name
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="email" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Email
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="role" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Role
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="capacity" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Capacity
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="competencies" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Competencies
+                </SortableTableHeader>
+                <SortableTableHeader 
+                  sortKey="assignments" 
+                  currentSort={sortConfig} 
+                  onSort={handleSort}
+                >
+                  Assignments
+                </SortableTableHeader>
+                {isManager && <TableHead className="text-right">Actions</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedAndFilteredPeople.map((person) => (
+                <TableRow key={person.id} className={!person.isActive ? 'opacity-60' : ''}>
+                  <TableCell>
+                    <Badge 
+                      variant={person.isActive ? "default" : "secondary"}
+                      className={person.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}
+                    >
+                      {person.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <Link href={`/people/${person.id}`} className="hover:underline font-medium">
+                        {person.name}
+                      </Link>
+                      {person.alternativeEmail && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Alt: {person.alternativeEmail}
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{person.email}</TableCell>
+                  <TableCell>
+                    <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
+                      {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{person.capacity}%</Badge>
+                      <Badge 
+                        variant={person.isOverCapacity ? "destructive" : "secondary"}
+                        className={person.isOverCapacity ? "bg-red-100 text-red-800" : ""}
+                      >
+                        {person.capacityUtilization}%
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{person._count?.competencies || 0}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{person._count?.projectAllocations || 0}</Badge>
+                  </TableCell>
+                  {isManager && (
+                    <TableCell className="text-right">
+                      <PersonActionsMenu person={person} />
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }

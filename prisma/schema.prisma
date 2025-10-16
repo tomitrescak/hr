@@ -42,16 +42,7 @@ enum LeanState {
   DONE
 }
 
-enum AssignmentType {
-  PROJECT
-  COURSE
-}
 
-enum ReviewStatus {
-  FINISHED
-  IN_PROGRESS
-  STALLED
-}
 
 enum Contribution {
   LOW
@@ -70,11 +61,9 @@ enum EntityKind {
   COURSE
   PROJECT
   TASK
-  ASSIGNMENT
-  REVIEW
   PERSON_COMPETENCY
   COURSE_COMPETENCY
-  RESPONSIBILITY
+  PROJECT_ALLOCATION
   OKR
   KEY_RESULT
 }
@@ -109,8 +98,6 @@ model User {
 
   // Relations
   person Person?
-  createdAssignments Assignment[] @relation("CreatedAssignments")
-  approvedReviews    Review[]     @relation("ApprovedReviews")
   changeLogs         ChangeLog[]
 
   @@map("users")
@@ -127,15 +114,14 @@ model Person {
   isActive         Boolean  @default(true)
   deactivatedAt    DateTime?
   cv               String?  // CV content for competency extraction
+  capacity         Int      @default(100) // Person's capacity percentage (0-100)
 
   // Relations
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   competencies        PersonCompetency[]
-  assignments         Assignment[]
-  reviews             Review[]            @relation("PersonReviews")
   oneOnOneReviews     PersonReview[]      @relation("PersonOneOnOneReviews")
   taskAssignments     Task[]
-  projectResponsibilities ProjectResponsibility[]
+  projectAllocations  ProjectAllocation[]
   courseEnrollments   CourseEnrollment[]
 
   @@map("people")
@@ -184,7 +170,6 @@ model Course {
 
   // Relations
   competencies CourseCompetency[]
-  assignments  Assignment[]
   enrollments  CourseEnrollment[]
   
   // Specialisation relations
@@ -257,10 +242,9 @@ model Project {
   updatedAt   DateTime      @updatedAt
 
   // Relations
-  okrs            OKR[]
-  responsibilities ProjectResponsibility[]
-  tasks           Task[]
-  assignments     Assignment[]
+  okrs         OKR[]
+  allocations  ProjectAllocation[]
+  tasks        Task[]
 
   @@map("projects")
 }
@@ -302,20 +286,21 @@ model KeyResult {
   @@map("key_results")
 }
 
-model ProjectResponsibility {
-  id          String  @id @default(uuid())
-  projectId   String
-  personId    String?
-  title       String
-  description String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model ProjectAllocation {
+  id                 String  @id @default(uuid())
+  projectId          String
+  personId           String?
+  title              String
+  description        String
+  capacityAllocation Int     @default(0) // Percentage of person's capacity allocated (0-100)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   person  Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
 
-  @@map("project_responsibilities")
+  @@map("project_allocations")
 }
 
 model Task {
@@ -339,63 +324,8 @@ model Task {
   @@map("tasks")
 }
 
-model Assignment {
-  id              String         @id @default(uuid())
-  personId        String
-  type            AssignmentType
-  projectId       String?
-  courseId        String?
-  startDate       DateTime       // Must be Monday
-  plannedEndDate  DateTime
-  createdById     String
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
 
-  // Relations
-  person    Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  course    Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  createdBy User     @relation("CreatedAssignments", fields: [createdById], references: [id])
-  reviews   Review[]
 
-  @@map("assignments")
-}
-
-model Review {
-  id               String             @id @default(uuid())
-  assignmentId     String
-  weekStartDate    DateTime           // Must match assignment week
-  status           ReviewStatus
-  competencyDeltas CompetencyDelta[]
-  reflection       String
-  positives        String[]
-  negatives        String[]
-  submittedById    String
-  submittedAt      DateTime           @default(now())
-  approvedById     String?
-  approvedAt       DateTime?
-  comment          String?
-
-  // Relations
-  assignment  Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  submittedBy Person     @relation("PersonReviews", fields: [submittedById], references: [id])
-  approvedBy  User?      @relation("ApprovedReviews", fields: [approvedById], references: [id])
-
-  @@unique([assignmentId, weekStartDate])
-  @@map("reviews")
-}
-
-model CompetencyDelta {
-  id             String       @id @default(uuid())
-  reviewId       String
-  competencyId   String
-  newProficiency Proficiency?
-
-  // Relations
-  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-
-  @@map("competency_deltas")
-}
 
 model PersonReview {
   id            String   @id @default(uuid())

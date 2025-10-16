@@ -67,20 +67,20 @@ export default function Home() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Reviews
+                Active Allocations
                 {isLoading ? (
                   <Skeleton className="h-5 w-8" />
                 ) : (
-                  <Badge variant="secondary">{stats?.reviewsCount || 0}</Badge>
+                  <Badge variant="secondary">{stats?.activeAllocations || 0}</Badge>
                 )}
               </CardTitle>
               <CardDescription>
-                Weekly assignments and reviews
+                Current project team allocations
               </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Submit weekly reviews and track competency development progress.
+                View active team member allocations across projects with capacity tracking.
               </p>
             </CardContent>
           </Card>

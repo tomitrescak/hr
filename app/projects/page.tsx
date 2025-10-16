@@ -244,28 +244,28 @@ export default function ProjectsPage() {
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-purple-500" />
                         <span className="text-muted-foreground">Team:</span>
-                        <Badge variant="outline">{project._count?.responsibilities || 0}</Badge>
+                        <Badge variant="outline">{project._count?.allocations || 0}</Badge>
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-orange-500" />
                         <span className="text-muted-foreground">Active:</span>
-                        <Badge variant="outline">{project._count?.assignments || 0}</Badge>
+                        <Badge variant="outline">{project._count?.allocations || 0}</Badge>
                       </div>
                     </div>
 
                     {/* Active Team Members */}
-                    {project.assignments && project.assignments.length > 0 && (
+                    {(project as any).allocations && (project as any).allocations.length > 0 && (
                       <div>
                         <h4 className="text-sm font-medium mb-2">Active Team</h4>
                         <div className="flex flex-wrap gap-1">
-                          {project.assignments.slice(0, 3).map((assignment) => (
-                            <Badge key={assignment.id} variant="secondary" className="text-xs">
-                              {assignment.person.name}
+                          {(project as any).allocations.slice(0, 3).map((allocation: any) => (
+                            <Badge key={allocation.id} variant="secondary" className="text-xs">
+                              {allocation.person?.name || 'Unassigned'}
                             </Badge>
                           ))}
-                          {project.assignments.length > 3 && (
+                          {(project as any).allocations.length > 3 && (
                             <Badge variant="secondary" className="text-xs">
-                              +{project.assignments.length - 3} more
+                              +{(project as any).allocations.length - 3} more
                             </Badge>
                           )}
                         </div>

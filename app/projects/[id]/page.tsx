@@ -95,13 +95,13 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     },
   })
 
-  const deleteResponsibilityMutation = trpc.projects.deleteResponsibility.useMutation({
+  const deleteAllocationMutation = trpc.projects.deleteAllocation.useMutation({
     onSuccess: () => {
-      addToast('success', 'Responsibility deleted successfully')
+      addToast('success', 'Allocation deleted successfully')
       refetch()
     },
     onError: (error) => {
-      addToast('error', error.message || 'Failed to delete responsibility')
+      addToast('error', error.message || 'Failed to delete allocation')
     },
   })
 
@@ -132,14 +132,14 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     }
   }
 
-  const handleEditResponsibility = (responsibility: any) => {
-    setEditingResponsibility(responsibility)
+  const handleEditAllocation = (allocation: any) => {
+    setEditingResponsibility(allocation)
     setIsEditResponsibilityDialogOpen(true)
   }
 
-  const handleDeleteResponsibility = (responsibilityId: string) => {
-    if (confirm('Are you sure you want to delete this responsibility?')) {
-      deleteResponsibilityMutation.mutate({ id: responsibilityId })
+  const handleDeleteAllocation = (allocationId: string) => {
+    if (confirm('Are you sure you want to delete this allocation?')) {
+      deleteAllocationMutation.mutate({ id: allocationId })
     }
   }
 
@@ -168,10 +168,10 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
 
   // Initialize filtered tasks when project loads
   useEffect(() => {
-    if (project?.tasks) {
-      setFilteredTasks(project.tasks)
+    if ((project as any)?.tasks) {
+      setFilteredTasks((project as any).tasks)
     }
-  }, [project?.tasks])
+  }, [(project as any)?.tasks])
 
   if (isLoading) {
     return (
@@ -200,8 +200,8 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     )
   }
 
-  const completedTasks = project.tasks.filter(task => task.state === 'DONE').length
-  const totalTasks = project.tasks.length
+  const completedTasks = ((project as any).tasks || []).filter((task: any) => task.state === 'DONE').length
+  const totalTasks = ((project as any).tasks || []).length
   const taskCompletion = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
 
   return (
@@ -273,7 +273,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Team Members</p>
-                <p className="text-2xl font-bold">{project.responsibilities.length}</p>
+                <p className="text-2xl font-bold">{((project as any).allocations || []).length}</p>
               </div>
               <Users className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -284,7 +284,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">OKRs</p>
-                <p className="text-2xl font-bold">{project.okrs.length}</p>
+                <p className="text-2xl font-bold">{((project as any).okrs || []).length}</p>
               </div>
               <Calendar className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -373,11 +373,11 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
         {/* Kanban Board Tab */}
         <TabsContent value="kanban" className="space-y-4">
           {people && (
-            <TaskFilters
-              tasks={project.tasks as any}
-              onFilteredTasksChange={setFilteredTasks}
-              people={people}
-            />
+              <TaskFilters
+                tasks={(project as any).tasks || []}
+                onFilteredTasksChange={setFilteredTasks}
+                people={people}
+              />
           )}
           <KanbanBoard 
             tasks={filteredTasks} 
@@ -393,43 +393,49 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
               <CardTitle>Team Members & Responsibilities</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {project.responsibilities.length > 0 ? (
+              {((project as any).allocations || []).length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Role/Responsibility</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Assigned To</TableHead>
+                      <TableHead>Capacity</TableHead>
                       <TableHead>Date Added</TableHead>
                       {canManage && <TableHead className="w-[70px]">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {project.responsibilities.map((responsibility) => (
-                      <TableRow key={responsibility.id}>
+                    {((project as any).allocations || []).map((allocation: any) => (
+                      <TableRow key={allocation.id}>
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{responsibility.title}</span>
+                            <span className="font-medium">{allocation.title}</span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-muted-foreground">
-                            {responsibility.description || '-'}
+                            {allocation.description || '-'}
                           </span>
                         </TableCell>
                         <TableCell>
-                          {responsibility.person ? (
+                          {allocation.person ? (
                             <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                              {responsibility.person.name}
+                              {allocation.person.name}
                             </Badge>
                           ) : (
                             <span className="text-sm text-muted-foreground">Unassigned</span>
                           )}
                         </TableCell>
                         <TableCell>
+                          <Badge variant="outline">
+                            {allocation.capacityAllocation}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <span className="text-sm text-muted-foreground">
-                            {new Date(responsibility.createdAt).toLocaleDateString()}
+                            {new Date(allocation.createdAt).toLocaleDateString()}
                           </span>
                         </TableCell>
                         {canManage && (
@@ -441,13 +447,13 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditResponsibility(responsibility)}>
+                                <DropdownMenuItem onClick={() => handleEditAllocation(allocation)}>
                                   <Edit className="h-4 w-4 mr-2" />
                                   Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
                                   className="text-destructive"
-                                  onClick={() => handleDeleteResponsibility(responsibility.id)}
+                                  onClick={() => handleDeleteAllocation(allocation.id)}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Delete
@@ -462,7 +468,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                 </Table>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  No team members assigned yet.
+                  No team members allocated yet.
                 </div>
               )}
             </CardContent>
@@ -471,14 +477,14 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
 
         {/* OKRs Tab */}
         <TabsContent value="okrs" className="space-y-4">
-          {project.okrs.length > 0 ? (
+          {((project as any).okrs || []).length > 0 ? (
             <div className="space-y-6">
-              {project.okrs.map((okr) => {
+              {((project as any).okrs || []).map((okr: any) => {
                 const keyResults = okr.keyResults || []
                 const okrTasks = okr.tasks || []
-                const completedKeyResults = keyResults.filter(kr => kr.progress === 100).length
+                const completedKeyResults = keyResults.filter((kr: any) => kr.progress === 100).length
                 const avgCompletion = keyResults.length > 0 
-                  ? Math.round(keyResults.reduce((sum, kr) => sum + kr.progress, 0) / keyResults.length)
+                  ? Math.round(keyResults.reduce((sum: number, kr: any) => sum + kr.progress, 0) / keyResults.length)
                   : 0
                 
                 return (
@@ -508,7 +514,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                               <span>Due: <span className="font-medium text-foreground">{new Date(okr.dueDate).toLocaleDateString()}</span></span>
                             )}
                             <span>Key Results: <span className="font-medium text-foreground">{completedKeyResults}/{keyResults.length}</span></span>
-                            <span>Tasks: <span className="font-medium text-foreground">{okrTasks.length}</span></span>
+                            <span>Tasks: <span className="font-medium text-foreground">{okrTasks.filter((t: any) => t.state === 'DONE').length}/{okrTasks.length}</span></span>
                           </div>
                         </div>
                         {canManage && (
@@ -564,7 +570,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                             Key Results ({completedKeyResults}/{keyResults.length})
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                            {keyResults.map((keyResult) => (
+                            {keyResults.map((keyResult: any) => (
                               <KeyResultCard
                                 key={keyResult.id}
                                 keyResult={keyResult}
@@ -581,7 +587,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                         <div>
                           <h4 className="font-medium text-sm mb-3 flex items-center">
                             <CheckSquare className="h-4 w-4 mr-2 text-purple-500" />
-                            Associated Tasks ({okrTasks.filter(t => t.state === 'DONE').length}/{okrTasks.length})
+                            Associated Tasks ({okrTasks.filter((t: any) => t.state === 'DONE').length}/{okrTasks.length})
                           </h4>
                           <div className="w-full overflow-x-auto">
                             <Table>
@@ -596,7 +602,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {okrTasks.map((task) => (
+                                {okrTasks.map((task: any) => (
                                   <TableRow key={task.id}>
                                     <TableCell>
                                       <div className={`w-3 h-3 rounded-full ${

@@ -23,7 +23,8 @@ export function AddPersonDialog({ onSuccess }: AddPersonDialogProps) {
     email: "",
     password: "",
     role: "USER" as Role,
-    entryDate: new Date().toISOString().split('T')[0]
+    entryDate: new Date().toISOString().split('T')[0],
+    capacity: 100
   })
 
   const utils = trpc.useUtils()
@@ -36,7 +37,8 @@ export function AddPersonDialog({ onSuccess }: AddPersonDialogProps) {
         email: "",
         password: "",
         role: "USER",
-        entryDate: new Date().toISOString().split('T')[0]
+        entryDate: new Date().toISOString().split('T')[0],
+        capacity: 100
       })
       onSuccess?.()
     },
@@ -133,6 +135,21 @@ export function AddPersonDialog({ onSuccess }: AddPersonDialogProps) {
               onChange={(e) => setFormData(prev => ({ ...prev, entryDate: e.target.value }))}
               required
             />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="capacity">Capacity (%)</Label>
+            <Input
+              id="capacity"
+              type="number"
+              min="0"
+              max="100"
+              value={formData.capacity}
+              onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) || 0 }))}
+              placeholder="Enter capacity percentage"
+              required
+            />
+            <p className="text-xs text-muted-foreground">Person&apos;s total capacity from 0% to 100%</p>
           </div>
           
           <div className="flex justify-end space-x-2 pt-4">

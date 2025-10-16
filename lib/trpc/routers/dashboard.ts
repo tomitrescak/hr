@@ -10,20 +10,11 @@ export const dashboardRouter = router({
     // Get projects count
     const projectsCount = await ctx.db.project.count()
 
-    // Get reviews count (total submitted reviews)
-    const reviewsCount = await ctx.db.review.count()
-
-    // Get additional useful stats
-    const activeAssignments = await ctx.db.assignment.count({
+    // Get active allocations count
+    const activeAllocations = await ctx.db.projectAllocation.count({
       where: {
-        startDate: { lte: new Date() },
-        plannedEndDate: { gte: new Date() },
-      },
-    })
-
-    const pendingReviews = await ctx.db.review.count({
-      where: {
-        approvedAt: null,
+        personId: { not: null },
+        capacityAllocation: { gt: 0 },
       },
     })
 
@@ -32,9 +23,7 @@ export const dashboardRouter = router({
     return {
       peopleCount,
       projectsCount,
-      reviewsCount,
-      activeAssignments,
-      pendingReviews,
+      activeAllocations,
       coursesCount,
     }
   }),

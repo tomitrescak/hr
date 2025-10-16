@@ -21,7 +21,7 @@ export const projectsRouter = router({
           },
           orderBy: { createdAt: 'asc' },
         },
-        responsibilities: {
+        allocations: {
           include: {
             person: {
               select: { id: true, name: true },
@@ -35,26 +35,10 @@ export const projectsRouter = router({
             },
           },
         },
-        assignments: {
-          include: {
-            person: {
-              select: { id: true, name: true },
-            },
-          },
-          where: {
-            startDate: {
-              lte: new Date(),
-            },
-            plannedEndDate: {
-              gte: new Date(),
-            },
-          },
-        },
         _count: {
           select: {
             tasks: true,
-            assignments: true,
-            responsibilities: true,
+            allocations: true,
             okrs: true,
           },
         },
@@ -77,21 +61,18 @@ export const projectsRouter = router({
               keyResults: {
                 orderBy: { createdAt: 'asc' },
               },
-          tasks: {
-            include: {
-              assignee: {
-                select: { id: true, name: true },
-              },
-              okr: {
-                select: { id: true, title: true },
+              tasks: {
+                include: {
+                  assignee: {
+                    select: { id: true, name: true },
+                  },
+                },
+                orderBy: { createdAt: 'asc' },
               },
             },
             orderBy: { createdAt: 'asc' },
           },
-            },
-            orderBy: { createdAt: 'asc' },
-          },
-          responsibilities: {
+          allocations: {
             include: {
               person: {
                 select: { id: true, name: true, email: true },
@@ -106,14 +87,6 @@ export const projectsRouter = router({
               },
             },
             orderBy: { createdAt: 'asc' },
-          },
-          assignments: {
-            include: {
-              person: {
-                select: { id: true, name: true, email: true },
-              },
-            },
-            orderBy: { startDate: 'desc' },
           },
         },
       })
@@ -144,13 +117,12 @@ export const projectsRouter = router({
         },
         include: {
           okrs: true,
-          responsibilities: true,
+          allocations: true,
           tasks: true,
           _count: {
             select: {
               tasks: true,
-              assignments: true,
-              responsibilities: true,
+              allocations: true,
             },
           },
         },
@@ -205,7 +177,7 @@ export const projectsRouter = router({
         data: filteredUpdates,
         include: {
           okrs: true,
-          responsibilities: {
+          allocations: {
             include: {
               person: {
                 select: { id: true, name: true },
@@ -579,18 +551,54 @@ export const projectsRouter = router({
       return { success: true }
     }),
 
-  // Manage responsibilities
-  createResponsibility: pmProcedure
+  // Manage project allocations
+  createAllocation: pmProcedure
     .input(
       z.object({
         projectId: z.string(),
         personId: z.string().optional(),
         title: z.string().min(2),
         description: z.string().min(10),
+        capacityAllocation: z.number().int().min(0).max(100).default(0),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const responsibility = await ctx.db.projectResponsibility.create({
+      // Validate capacity allocation if person is assigned
+      if (input.personId && input.capacityAllocation > 0) {
+        const person = await ctx.db.person.findUnique({
+          where: { id: input.personId },
+          include: {
+            projectAllocations: {
+              where: {
+                personId: input.personId,
+              },
+            },
+          },
+        })
+
+        if (!person) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Person not found',
+          })
+        }
+
+        // Calculate current capacity utilization
+        const currentAllocated = person.projectAllocations.reduce(
+          (sum, allocation) => sum + allocation.capacityAllocation,
+          0
+        )
+        
+        const newTotalCapacity = currentAllocated + input.capacityAllocation
+        if (newTotalCapacity > person.capacity) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Assignment would exceed person's capacity. Current: ${currentAllocated}%, Requested: ${input.capacityAllocation}%, Available: ${person.capacity}%`,
+          })
+        }
+      }
+      
+      const allocation = await ctx.db.projectAllocation.create({
         data: input,
         include: {
           person: {
@@ -601,8 +609,8 @@ export const projectsRouter = router({
 
       await ctx.db.changeLog.create({
         data: {
-          entity: 'RESPONSIBILITY',
-          entityId: responsibility.id,
+          entity: 'PROJECT_ALLOCATION',
+          entityId: allocation.id,
           field: 'created',
           toValue: input,
           state: 'CREATED',
@@ -610,34 +618,63 @@ export const projectsRouter = router({
         },
       })
 
-      return responsibility
+      return allocation
     }),
 
-  updateResponsibility: pmProcedure
+  updateAllocation: pmProcedure
     .input(
       z.object({
         id: z.string(),
         personId: z.string().optional(),
         title: z.string().min(2).optional(),
         description: z.string().min(10).optional(),
+        capacityAllocation: z.number().int().min(0).max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input
 
-      const current = await ctx.db.projectResponsibility.findUnique({ where: { id } })
+      const current = await ctx.db.projectAllocation.findUnique({ where: { id } })
       if (!current) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Responsibility not found',
+          message: 'Project allocation not found',
         })
+      }
+
+      // Validate capacity if updating allocation
+      if (updates.capacityAllocation !== undefined && updates.personId) {
+        const person = await ctx.db.person.findUnique({
+          where: { id: updates.personId },
+          include: {
+            projectAllocations: {
+              where: {
+                id: { not: id }, // Exclude current allocation
+              },
+            },
+          },
+        })
+
+        if (person) {
+          const otherAllocations = person.projectAllocations.reduce(
+            (sum, allocation) => sum + allocation.capacityAllocation,
+            0
+          )
+          
+          if (otherAllocations + updates.capacityAllocation > person.capacity) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Update would exceed person's capacity`,
+            })
+          }
+        }
       }
 
       const filteredUpdates = Object.fromEntries(
         Object.entries(updates).filter(([_, v]) => v !== undefined)
       )
 
-      const responsibility = await ctx.db.projectResponsibility.update({
+      const allocation = await ctx.db.projectAllocation.update({
         where: { id },
         data: filteredUpdates,
         include: {
@@ -649,7 +686,7 @@ export const projectsRouter = router({
 
       await ctx.db.changeLog.create({
         data: {
-          entity: 'RESPONSIBILITY',
+          entity: 'PROJECT_ALLOCATION',
           entityId: id,
           field: Object.keys(filteredUpdates).join(', '),
           fromValue: Object.keys(filteredUpdates).reduce((acc, key) => {
@@ -662,13 +699,13 @@ export const projectsRouter = router({
         },
       })
 
-      return responsibility
+      return allocation
     }),
 
-  deleteResponsibility: pmProcedure
+  deleteAllocation: pmProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.projectResponsibility.delete({
+      await ctx.db.projectAllocation.delete({
         where: { id: input.id },
       })
 
