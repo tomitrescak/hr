@@ -6,7 +6,6 @@ import { useSession } from 'next-auth/react'
 import { 
   Plus, 
   Search, 
-  Filter, 
   MoreVertical, 
   Users, 
   BookOpen, 
@@ -14,9 +13,7 @@ import {
   Edit, 
   Trash2,
   Play,
-  CheckCircle,
-  Clock,
-  Archive
+  CheckCircle
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Button } from '@/components/ui/button'
@@ -41,23 +38,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { CreateCourseForm } from '@/components/courses/CreateCourseForm'
 import { AppLayout } from '@/components/layout/app-layout'
 
-const courseStatusColors = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
-  ARCHIVED: 'bg-red-100 text-red-800',
-}
-
-const courseStatusIcons = {
-  DRAFT: Clock,
-  PUBLISHED: Play,
-  ARCHIVED: Archive,
-}
 
 export default function CoursesPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   const {
@@ -65,7 +50,6 @@ export default function CoursesPage() {
     isLoading,
     refetch,
   } = trpc.courses.list.useQuery({
-    status: statusFilter === 'all' ? undefined : statusFilter as any,
     search: searchTerm || undefined,
   })
 
@@ -209,29 +193,15 @@ export default function CoursesPage() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            placeholder="Search courses..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="DRAFT">Draft</SelectItem>
-            <SelectItem value="PUBLISHED">Published</SelectItem>
-            <SelectItem value="ARCHIVED">Archived</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+        <Input
+          placeholder="Search courses..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 max-w-md"
+        />
       </div>
 
       {/* Courses Table */}
@@ -246,7 +216,6 @@ export default function CoursesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Course</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Enrollments</TableHead>
                 <TableHead>Competencies</TableHead>
                 <TableHead>Duration</TableHead>
@@ -255,7 +224,6 @@ export default function CoursesPage() {
             </TableHeader>
             <TableBody>
               {filteredCourses.map((course) => {
-                const StatusIcon = courseStatusIcons[course.status]
                 const isEnrolled = course.enrollments.some(e => e.person.id === session?.user?.id)
                 
                 return (
@@ -274,15 +242,6 @@ export default function CoursesPage() {
                           </p>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={courseStatusColors[course.status]}
-                      >
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {course.status}
-                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center">
@@ -313,7 +272,7 @@ export default function CoursesPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
-                          {course.status === 'PUBLISHED' && !isEnrolled && (
+                          {!isEnrolled && (
                             <DropdownMenuItem
                               onClick={() => handleEnroll(course.id)}
                             >
@@ -349,8 +308,8 @@ export default function CoursesPage() {
 
           {filteredCourses.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              {searchTerm || statusFilter !== 'all'
-                ? 'No courses match your filters'
+              {searchTerm
+                ? 'No courses match your search'
                 : 'No courses found'}
             </div>
           )}

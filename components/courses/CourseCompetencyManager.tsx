@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { CompetencySelector } from './CompetencySelector'
+import { supportsProficiency } from '@/lib/utils/competency'
 
 interface CourseCompetency {
   id: string
@@ -117,8 +118,6 @@ export function CourseCompetencyManager({
     }
   }
 
-  const supportsProficiency = (type: string) => 
-    ['SKILL', 'TECH_TOOL', 'ABILITY'].includes(type)
 
   const renderCardView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -162,7 +161,7 @@ export function CourseCompetencyManager({
               </p>
             )}
 
-            {supportsProficiency(courseCompetency.competency.type) && (
+            {supportsProficiency(courseCompetency.competency.type as any) && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Proficiency:</span>
                 {!readOnly && editingProficiency === courseCompetency.competency.id && onUpdateProficiency ? (

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Loader2 } from 'lucide-react'
+import { supportsProficiency } from '@/lib/utils/competency'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -97,8 +98,7 @@ export function CompetencySelector({
   }, [availableCompetencies, selectedType, existingCompetencies, competencySearch])
   
   const selectedCompetency = availableCompetencies.find(c => c.id === selectedCompetencyId)
-  const supportsProficiency = (selectedCompetency?.type || selectedType) && 
-    ['SKILL', 'TECH_TOOL', 'ABILITY'].includes(selectedCompetency?.type || selectedType)
+  const shouldShowProficiency = supportsProficiency((selectedCompetency?.type || selectedType) as any)
   
   const handleCreateNew = async () => {
     if (!newCompetencyName.trim() || !selectedType) return
@@ -111,7 +111,7 @@ export function CompetencySelector({
       })
       
       // Add the newly created competency
-      await onAdd(newCompetency.id, supportsProficiency && proficiency ? proficiency : undefined)
+      await onAdd(newCompetency.id, shouldShowProficiency && proficiency ? proficiency : undefined)
       
       // Reset form
       setSelectedType('')
@@ -129,7 +129,7 @@ export function CompetencySelector({
     if (isCreatingNew) {
       await handleCreateNew()
     } else if (selectedCompetencyId) {
-      await onAdd(selectedCompetencyId, supportsProficiency && proficiency ? proficiency : undefined)
+      await onAdd(selectedCompetencyId, shouldShowProficiency && proficiency ? proficiency : undefined)
       // Reset form
       setSelectedType('')
       setSelectedCompetencyId('')
@@ -332,7 +332,7 @@ export function CompetencySelector({
         </div>
       )}
       
-      {supportsProficiency && (selectedCompetencyId || isCreatingNew) && (
+      {shouldShowProficiency && (selectedCompetencyId || isCreatingNew) && (
         <div className="space-y-2">
           <Label>Proficiency Level</Label>
           <Select value={proficiency || 'NONE'} onValueChange={(value) => setProficiency(value === 'NONE' ? '' : value)}>

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
+import { supportsProficiency } from '../../utils/competency'
 import { Role } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
 
@@ -675,8 +676,8 @@ export const peopleRouter = router({
         })
       }
 
-      // Only SKILL, TECH_TOOL, and ABILITY competencies should have proficiency
-      const shouldHaveProficiency = ['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE'].includes(competency.type)
+      // Only certain competencies should have proficiency
+      const shouldHaveProficiency = supportsProficiency(competency.type)
       
       if (proficiency && !shouldHaveProficiency) {
         throw new TRPCError({

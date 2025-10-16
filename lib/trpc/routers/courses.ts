@@ -7,16 +7,11 @@ export const coursesRouter = router({
   list: protectedProcedure
     .input(
       z.object({
-        status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
         search: z.string().optional(),
       }).optional().default({})
     )
     .query(async ({ ctx, input }) => {
       const where: any = {}
-      
-      if (input?.status) {
-        where.status = input.status
-      }
       
       if (input?.search) {
         where.OR = [
@@ -49,7 +44,7 @@ export const coursesRouter = router({
             },
           },
         },
-        orderBy: [{ status: 'asc' }, { name: 'asc' }],
+        orderBy: { name: 'asc' },
       })
 
       return courses
@@ -104,7 +99,6 @@ export const coursesRouter = router({
         description: z.string().optional(),
         content: z.string().optional(),
         duration: z.number().int().positive().optional(),
-        status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
         competencyIds: z.array(z.string()).optional().default([]),
       })
     )
@@ -188,7 +182,6 @@ export const coursesRouter = router({
         description: z.string().optional(),
         content: z.string().optional(),
         duration: z.number().int().positive().optional(),
-        status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
         competencyIds: z.array(z.string()).optional(),
       })
     )
@@ -367,12 +360,6 @@ export const coursesRouter = router({
         })
       }
 
-      if (course.status !== 'PUBLISHED') {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Course is not available for enrollment',
-        })
-      }
 
 
       // Check if already enrolled
@@ -475,8 +462,7 @@ export const coursesRouter = router({
 
   // Get course statistics
   getStats: protectedProcedure.query(async ({ ctx }) => {
-    const stats = await ctx.db.course.groupBy({
-      by: ['status'],
+    const courseStats = await ctx.db.course.aggregate({
       _count: {
         _all: true,
       },
@@ -498,15 +484,11 @@ export const coursesRouter = router({
       },
     })
 
-    const totalCourses = stats.reduce((sum, stat) => sum + stat._count._all, 0)
+    const totalCourses = courseStats._count._all
     const completedEnrollments = completionStats.find(s => s.completed)?._count._all || 0
     const totalEnrollments = enrollmentStats._count._all
 
     return {
-      byStatus: stats.reduce((acc, stat) => {
-        acc[stat.status] = stat._count._all
-        return acc
-      }, {} as Record<string, number>),
       totalCourses,
       totalEnrollments,
       completedEnrollments,
@@ -526,7 +508,6 @@ export const coursesRouter = router({
             name: true,
             description: true,
             duration: true,
-            status: true,
           },
         },
       },
@@ -563,7 +544,6 @@ export const coursesRouter = router({
               name: true,
               description: true,
               duration: true,
-              status: true,
               competencies: {
                 include: {
                   competency: {
@@ -645,7 +625,6 @@ export const coursesRouter = router({
               name: true,
               description: true,
               duration: true,
-              status: true,
             },
           },
         },
@@ -732,7 +711,6 @@ export const coursesRouter = router({
               name: true,
               description: true,
               duration: true,
-              status: true,
             },
           },
         },
@@ -865,7 +843,6 @@ export const coursesRouter = router({
               name: true,
               description: true,
               duration: true,
-              status: true,
             },
           },
         },

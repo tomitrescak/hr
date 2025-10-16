@@ -27,11 +27,7 @@ export const dashboardRouter = router({
       },
     })
 
-    const coursesCount = await ctx.db.course.count({
-      where: {
-        status: 'PUBLISHED',
-      },
-    })
+    const coursesCount = await ctx.db.course.count()
 
     return {
       peopleCount,

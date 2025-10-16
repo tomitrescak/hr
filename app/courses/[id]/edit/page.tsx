@@ -34,7 +34,6 @@ const courseSchema = z.object({
   description: z.string().optional(),
   content: z.string().optional(),
   duration: z.string().transform(val => val ? parseInt(val, 10) : undefined).optional(),
-  status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']),
 })
 
 type CourseFormData = {
@@ -42,7 +41,6 @@ type CourseFormData = {
   description?: string
   content?: string
   duration?: string
-  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
 }
 
 interface CourseEditPageProps {
@@ -77,7 +75,6 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
       description: '',
       content: '',
       duration: '',
-      status: 'DRAFT' as const,
     },
   })
 
@@ -89,7 +86,6 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         description: course.description || '',
         content: course.content || '',
         duration: course.duration?.toString() || '',
-        status: course.status,
       })
     }
   }, [course, reset])
@@ -150,7 +146,6 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         description: data.description,
         content: data.content,
         duration: data.duration ? parseInt(data.duration, 10) : undefined,
-        status: data.status,
       })
     } catch (error) {
       console.error('Failed to update course:', error)
@@ -263,41 +258,16 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
               <CardTitle>Course Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Course Name *</Label>
-                  <Input
-                    id="name"
-                    placeholder="Enter course name"
-                    {...register('name')}
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-destructive">{errors.name.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status *</Label>
-                  <Controller
-                    name="status"
-                    control={control}
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="DRAFT">Draft</SelectItem>
-                          <SelectItem value="PUBLISHED">Published</SelectItem>
-                          <SelectItem value="ARCHIVED">Archived</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.status && (
-                    <p className="text-sm text-destructive">{errors.status.message}</p>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="name">Course Name *</Label>
+                <Input
+                  id="name"
+                  placeholder="Enter course name"
+                  {...register('name')}
+                />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">

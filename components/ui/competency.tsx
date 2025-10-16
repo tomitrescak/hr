@@ -2,6 +2,7 @@ import * as React from "react"
 import { Badge } from "./badge"
 import { Card, CardContent, CardHeader, CardTitle } from "./card"
 import { cn } from "@/lib/utils"
+import { supportsProficiency } from "@/lib/utils/competency"
 
 interface CompetencyProps {
   id: string
@@ -73,8 +74,7 @@ export function CompetencyCard({
   onProficiencyChange, 
   className 
 }: CompetencyCardProps) {
-  const showProficiencyForType = showProficiency && 
-    ['SKILL', 'TECH_TOOL', 'ABILITY'].includes(competency.type)
+  const showProficiencyForType = showProficiency && supportsProficiency(competency.type)
   
   return (
     <Card className={cn("h-full", className)}>

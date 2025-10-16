@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { router, publicProcedure, protectedProcedure, pmProcedure } from '../trpc'
-import { db as prisma } from '@/lib/db'
+import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
+import { PrismaClient } from '@prisma/client'
+import { supportsProficiency } from '../../utils/competency'
 
 // Helper function to get Monday of a given date
 function getMondayOfWeek(date: Date): Date {
@@ -19,7 +20,7 @@ export const reviewsRouter = router({
       weekStartDate: z.date(),
     }))
     .query(async ({ input, ctx }) => {
-      const assignment = await prisma.assignment.findUnique({
+      const assignment = await ctx.db.assignment.findUnique({
         where: { id: input.assignmentId },
         include: {
           person: true,
@@ -46,7 +47,7 @@ export const reviewsRouter = router({
       // Ensure weekStartDate is Monday
       const mondayDate = getMondayOfWeek(input.weekStartDate)
 
-      const review = await prisma.review.findUnique({
+      const review = await ctx.db.review.findUnique({
         where: {
           assignmentId_weekStartDate: {
             assignmentId: input.assignmentId,
@@ -100,7 +101,7 @@ export const reviewsRouter = router({
       negatives: z.array(z.string()),
     }))
     .mutation(async ({ input, ctx }) => {
-      const assignment = await prisma.assignment.findUnique({
+      const assignment = await ctx.db.assignment.findUnique({
         where: { id: input.assignmentId },
         include: {
           person: true,
@@ -136,7 +137,7 @@ export const reviewsRouter = router({
       // Validate competency deltas - only allow proficiency updates for SKILL, TECH_TOOL, ABILITY
       if (input.competencyDeltas && input.competencyDeltas.length > 0) {
         const competencyIds = input.competencyDeltas.map(d => d.competencyId)
-        const competencies = await prisma.competency.findMany({
+        const competencies = await ctx.db.competency.findMany({
           where: { id: { in: competencyIds } }
         })
 
@@ -149,8 +150,8 @@ export const reviewsRouter = router({
             })
           }
 
-          // Only SKILL, TECH_TOOL, ABILITY can have proficiency
-          if (delta.newProficiency && !['SKILL', 'TECH_TOOL', 'ABILITY'].includes(competency.type)) {
+          // Only certain competencies can have proficiency
+          if (delta.newProficiency && !supportsProficiency(competency.type)) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: `Competency ${competency.name} (${competency.type}) cannot have proficiency`,
@@ -160,7 +161,7 @@ export const reviewsRouter = router({
       }
 
       // Create or update review
-      const review = await prisma.review.upsert({
+      const review = await ctx.db.review.upsert({
         where: {
           assignmentId_weekStartDate: {
             assignmentId: input.assignmentId,
@@ -191,7 +192,7 @@ export const reviewsRouter = router({
       // Handle competency deltas
       if (input.competencyDeltas && input.competencyDeltas.length > 0) {
         // Delete existing deltas
-        await prisma.competencyDelta.deleteMany({
+        await ctx.db.competencyDelta.deleteMany({
           where: { reviewId: review.id }
         })
 
@@ -202,14 +203,14 @@ export const reviewsRouter = router({
           newProficiency: delta.newProficiency,
         }))
 
-        await prisma.competencyDelta.createMany({
+        await ctx.db.competencyDelta.createMany({
           data: deltasData
         })
 
         // Update PersonCompetency records based on deltas
         for (const delta of input.competencyDeltas) {
           if (delta.newProficiency) {
-            await prisma.personCompetency.upsert({
+            await ctx.db.personCompetency.upsert({
               where: {
                 personId_competencyId: {
                   personId: assignment.person.id,
@@ -229,7 +230,7 @@ export const reviewsRouter = router({
             })
 
             // Create changelog entry for proficiency change
-            await prisma.changeLog.create({
+            await ctx.db.changeLog.create({
               data: {
                 entity: 'PERSON_COMPETENCY',
                 entityId: `${assignment.person.id}-${delta.competencyId}`,
@@ -245,7 +246,7 @@ export const reviewsRouter = router({
       }
 
       // Create changelog entry for review
-      await prisma.changeLog.create({
+      await ctx.db.changeLog.create({
         data: {
           entity: 'REVIEW',
           entityId: review.id,
@@ -260,7 +261,7 @@ export const reviewsRouter = router({
         }
       })
 
-      return prisma.review.findUnique({
+      return ctx.db.review.findUnique({
         where: { id: review.id },
         include: {
           competencyDeltas: true,
@@ -277,7 +278,7 @@ export const reviewsRouter = router({
       comment: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const review = await prisma.review.findUnique({
+      const review = await ctx.db.review.findUnique({
         where: { id: input.id }
       })
 
@@ -288,7 +289,7 @@ export const reviewsRouter = router({
         })
       }
 
-      const updatedReview = await prisma.review.update({
+      const updatedReview = await ctx.db.review.update({
         where: { id: input.id },
         data: {
           approvedById: ctx.session.user.id,
@@ -303,7 +304,7 @@ export const reviewsRouter = router({
       })
 
       // Create changelog entry
-      await prisma.changeLog.create({
+      await ctx.db.changeLog.create({
         data: {
           entity: 'REVIEW',
           entityId: review.id,
@@ -350,7 +351,7 @@ export const reviewsRouter = router({
         }
       }
 
-      return prisma.review.findMany({
+      return ctx.db.review.findMany({
         where,
         include: {
           assignment: {
@@ -379,7 +380,7 @@ export const reviewsRouter = router({
       startDate: z.date().optional(),
       endDate: z.date().optional(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const where: any = {}
 
       if (input.approvedOnly !== undefined) {
@@ -397,7 +398,7 @@ export const reviewsRouter = router({
         }
       }
 
-      return prisma.review.findMany({
+      return ctx.db.review.findMany({
         where,
         include: {
           assignment: {
@@ -424,7 +425,7 @@ export const reviewsRouter = router({
       id: z.string(),
     }))
     .query(async ({ input, ctx }) => {
-      const review = await prisma.review.findUnique({
+      const review = await ctx.db.review.findUnique({
         where: { id: input.id },
         include: {
           assignment: {
@@ -476,7 +477,7 @@ export const reviewsRouter = router({
         })
       }
 
-      return prisma.competency.findMany({
+      return ctx.db.competency.findMany({
         where: {
           type: { in: ['SKILL', 'TECH_TOOL', 'ABILITY'] },
         },

@@ -64,11 +64,6 @@ enum ChangeState {
   MODIFIED
 }
 
-enum CourseStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
 
 enum EntityKind {
   PERSON
@@ -177,7 +172,6 @@ model Course {
   description    String?
   content        String?
   duration       Int?          // Duration in hours
-  status         CourseStatus  @default(DRAFT)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

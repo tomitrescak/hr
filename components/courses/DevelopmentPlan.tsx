@@ -87,7 +87,6 @@ export function DevelopmentPlan({ personId, canManage = false }: DevelopmentPlan
   })
   
   const { data: availableCourses } = trpc.courses.list.useQuery({
-    status: "PUBLISHED",
     search: searchTerm
   })
 

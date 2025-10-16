@@ -12,11 +12,9 @@ import {
   BookOpen, 
   Calendar,
   Clock,
-  Play,
   CheckCircle,
   User,
   GraduationCap,
-  Archive,
   Target,
   UserPlus
 } from 'lucide-react'
@@ -31,17 +29,6 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
 import { marked } from 'marked'
 
-const courseStatusColors = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
-  ARCHIVED: 'bg-red-100 text-red-800',
-}
-
-const courseStatusIcons = {
-  DRAFT: Clock,
-  PUBLISHED: Play,
-  ARCHIVED: Archive,
-}
 
 const competencyTypeColors = {
   KNOWLEDGE: 'bg-blue-100 text-blue-800',
@@ -105,7 +92,6 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
 
   const canManage = session?.user?.role === 'PROJECT_MANAGER'
   const isEnrolled = course?.enrollments.some(e => e.person.id === session?.user?.id)
-  const StatusIcon = course ? courseStatusIcons[course.status] : Clock
 
   const handleCompetencyClick = (competencyId: string) => {
     router.push(`/competencies/${competencyId}`)
@@ -169,19 +155,10 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">{course.name}</h1>
-            <div className="flex items-center space-x-2 mt-2">
-              <Badge
-                variant="secondary"
-                className={courseStatusColors[course.status]}
-              >
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {course.status}
-              </Badge>
-            </div>
           </div>
         </div>
         <div className="flex space-x-2">
-          {course.status === 'PUBLISHED' && !isEnrolled && (
+          {!isEnrolled && (
             <Button onClick={handleEnroll} disabled={enrollMutation.isPending}>
               <UserPlus className="h-4 w-4 mr-2" />
               Enroll

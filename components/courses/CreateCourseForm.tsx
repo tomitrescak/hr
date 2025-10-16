@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { X, Loader2 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
+import { supportsProficiency } from '@/lib/utils/competency'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,7 +26,6 @@ const courseSchema = z.object({
   description: z.string().optional(),
   content: z.string().optional(),
   duration: z.coerce.number().int().positive().optional(),
-  status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
   competencyIds: z.array(z.string()).optional().default([]),
 })
 
@@ -59,12 +59,10 @@ export function CreateCourseForm({ onSuccess }: CreateCourseFormProps) {
   } = useForm<CourseFormData>({
     resolver: zodResolver(courseSchema),
     defaultValues: {
-      status: 'DRAFT',
       competencyIds: [],
     },
   })
 
-  const watchedStatus = watch('status')
 
   // Get all competencies for selection
   const { data: competencies } = trpc.competencies.list.useQuery()
@@ -117,39 +115,17 @@ export function CreateCourseForm({ onSuccess }: CreateCourseFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Course Name */}
-        <div className="space-y-2">
-          <Label htmlFor="name">Course Name</Label>
-          <Input
-            id="name"
-            placeholder="Enter course name"
-            {...register('name')}
-          />
-          {errors.name && (
-            <p className="text-sm text-destructive">{errors.name.message}</p>
-          )}
-        </div>
-
-        {/* Status */}
-        <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
-          <Select
-            value={watchedStatus}
-            onValueChange={(value) => setValue('status', value as any)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DRAFT">Draft</SelectItem>
-              <SelectItem value="PUBLISHED">Published</SelectItem>
-            </SelectContent>
-          </Select>
-          {errors.status && (
-            <p className="text-sm text-destructive">{errors.status.message}</p>
-          )}
-        </div>
+      {/* Course Name */}
+      <div className="space-y-2">
+        <Label htmlFor="name">Course Name</Label>
+        <Input
+          id="name"
+          placeholder="Enter course name"
+          {...register('name')}
+        />
+        {errors.name && (
+          <p className="text-sm text-destructive">{errors.name.message}</p>
+        )}
       </div>
 
       {/* Description */}

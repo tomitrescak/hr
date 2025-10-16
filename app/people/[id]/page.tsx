@@ -864,14 +864,14 @@ ${tasksMarkdown}`
                     </div>
                     {person.cv && (
                       <div className="col-span-2">
-                        <Label>CV / Resume</Label>
-                        <div className="mt-1 p-4 bg-white border rounded-md">
+                        <h1 className="text-2xl font-semibold">CV / Resume</h1>
+                        <hr className="my-2" />
+                        
                           <div 
                             className="cv-content"
                             dangerouslySetInnerHTML={{ __html: markdownToHtml(person.cv) }}
                           />
                         </div>
-                      </div>
                     )}
                   </div>
                 )}
@@ -1740,7 +1740,7 @@ function AddCompetencyForm({
   
   const selectedCompetency = availableCompetencies.find(c => c.id === selectedCompetencyId)
   const supportsProficiency = (selectedCompetency?.type || selectedType) && 
-    ['SKILL', 'TECH_TOOL', 'ABILITY'].includes(selectedCompetency?.type || selectedType)
+    ['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE'].includes(selectedCompetency?.type || selectedType)
   
   const handleCreateNew = async () => {
     if (!newCompetencyName.trim() || !selectedType) return
