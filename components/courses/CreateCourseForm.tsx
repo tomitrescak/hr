@@ -25,7 +25,6 @@ const courseSchema = z.object({
   description: z.string().optional(),
   content: z.string().optional(),
   duration: z.coerce.number().int().positive().optional(),
-  maxEnrollments: z.coerce.number().int().positive().optional(),
   status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
   competencyIds: z.array(z.string()).optional().default([]),
 })
@@ -181,36 +180,19 @@ export function CreateCourseForm({ onSuccess }: CreateCourseFormProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Duration */}
-        <div className="space-y-2">
-          <Label htmlFor="duration">Duration (hours)</Label>
-          <Input
-            id="duration"
-            type="number"
-            min="1"
-            placeholder="e.g., 10"
-            {...register('duration')}
-          />
-          {errors.duration && (
-            <p className="text-sm text-destructive">{errors.duration.message}</p>
-          )}
-        </div>
-
-        {/* Max Enrollments */}
-        <div className="space-y-2">
-          <Label htmlFor="maxEnrollments">Max Enrollments</Label>
-          <Input
-            id="maxEnrollments"
-            type="number"
-            min="1"
-            placeholder="e.g., 50"
-            {...register('maxEnrollments')}
-          />
-          {errors.maxEnrollments && (
-            <p className="text-sm text-destructive">{errors.maxEnrollments.message}</p>
-          )}
-        </div>
+      {/* Duration */}
+      <div className="space-y-2">
+        <Label htmlFor="duration">Duration (hours)</Label>
+        <Input
+          id="duration"
+          type="number"
+          min="1"
+          placeholder="e.g., 10"
+          {...register('duration')}
+        />
+        {errors.duration && (
+          <p className="text-sm text-destructive">{errors.duration.message}</p>
+        )}
       </div>
 
       {/* Competencies Selection */}

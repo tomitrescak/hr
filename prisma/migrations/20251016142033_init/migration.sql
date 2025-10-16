@@ -5,7 +5,7 @@ CREATE TYPE "public"."Role" AS ENUM ('USER', 'PROJECT_MANAGER');
 CREATE TYPE "public"."CompetencyType" AS ENUM ('KNOWLEDGE', 'SKILL', 'TECH_TOOL', 'ABILITY', 'VALUE', 'BEHAVIOUR', 'ENABLER');
 
 -- CreateEnum
-CREATE TYPE "public"."Proficiency" AS ENUM ('BEGINNER', 'NOVICE', 'COMPETENT', 'PROFICIENT', 'EXPERT');
+CREATE TYPE "public"."Proficiency" AS ENUM ('BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT');
 
 -- CreateEnum
 CREATE TYPE "public"."LeanState" AS ENUM ('BACKLOG', 'READY', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE');
@@ -23,10 +23,19 @@ CREATE TYPE "public"."Contribution" AS ENUM ('LOW', 'MEDIUM', 'HIGH');
 CREATE TYPE "public"."ChangeState" AS ENUM ('CREATED', 'MODIFIED');
 
 -- CreateEnum
-CREATE TYPE "public"."EntityKind" AS ENUM ('PERSON', 'COURSE', 'PROJECT', 'TASK', 'ASSIGNMENT', 'REVIEW', 'PERSON_COMPETENCY', 'COURSE_COMPETENCY', 'RESPONSIBILITY', 'OKR');
+CREATE TYPE "public"."CourseStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+
+-- CreateEnum
+CREATE TYPE "public"."EntityKind" AS ENUM ('PERSON', 'COURSE', 'PROJECT', 'TASK', 'ASSIGNMENT', 'REVIEW', 'PERSON_COMPETENCY', 'COURSE_COMPETENCY', 'RESPONSIBILITY', 'OKR', 'KEY_RESULT');
 
 -- CreateEnum
 CREATE TYPE "public"."Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH');
+
+-- CreateEnum
+CREATE TYPE "public"."ProjectStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'ON_HOLD', 'PLANNING');
+
+-- CreateEnum
+CREATE TYPE "public"."EnrollmentStatus" AS ENUM ('WISHLIST', 'IN_PROGRESS', 'COMPLETED');
 
 -- CreateTable
 CREATE TABLE "public"."users" (
@@ -47,7 +56,12 @@ CREATE TABLE "public"."people" (
     "userId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
+    "alternativeEmail" TEXT,
     "role" "public"."Role" NOT NULL,
+    "entryDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "deactivatedAt" TIMESTAMP(3),
+    "cv" TEXT,
 
     CONSTRAINT "people_pkey" PRIMARY KEY ("id")
 );
@@ -79,8 +93,10 @@ CREATE TABLE "public"."person_competencies" (
 CREATE TABLE "public"."courses" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
-    "link" TEXT,
+    "description" TEXT,
+    "content" TEXT,
+    "duration" INTEGER,
+    "status" "public"."CourseStatus" NOT NULL DEFAULT 'DRAFT',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -92,9 +108,24 @@ CREATE TABLE "public"."course_competencies" (
     "id" TEXT NOT NULL,
     "courseId" TEXT NOT NULL,
     "competencyId" TEXT NOT NULL,
-    "contribution" "public"."Contribution" NOT NULL,
+    "proficiency" "public"."Proficiency",
 
     CONSTRAINT "course_competencies_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."course_enrollments" (
+    "id" TEXT NOT NULL,
+    "courseId" TEXT NOT NULL,
+    "personId" TEXT NOT NULL,
+    "status" "public"."EnrollmentStatus" NOT NULL DEFAULT 'WISHLIST',
+    "progress" INTEGER DEFAULT 0,
+    "completed" BOOLEAN NOT NULL DEFAULT false,
+    "enrolledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "startedAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+
+    CONSTRAINT "course_enrollments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -102,6 +133,7 @@ CREATE TABLE "public"."projects" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
+    "status" "public"."ProjectStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -124,6 +156,22 @@ CREATE TABLE "public"."okrs" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."key_results" (
+    "id" TEXT NOT NULL,
+    "okrId" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "progress" INTEGER NOT NULL DEFAULT 0,
+    "target" TEXT,
+    "metric" TEXT,
+    "dueDate" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "key_results_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."project_responsibilities" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
@@ -140,6 +188,7 @@ CREATE TABLE "public"."project_responsibilities" (
 CREATE TABLE "public"."tasks" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
+    "okrId" TEXT,
     "title" TEXT NOT NULL,
     "description" TEXT,
     "assigneeId" TEXT,
@@ -197,6 +246,18 @@ CREATE TABLE "public"."competency_deltas" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."person_reviews" (
+    "id" TEXT NOT NULL,
+    "personId" TEXT NOT NULL,
+    "recordingText" TEXT NOT NULL,
+    "notes" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "person_reviews_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."change_logs" (
     "id" TEXT NOT NULL,
     "entity" "public"."EntityKind" NOT NULL,
@@ -227,6 +288,9 @@ CREATE UNIQUE INDEX "person_competencies_personId_competencyId_key" ON "public".
 CREATE UNIQUE INDEX "course_competencies_courseId_competencyId_key" ON "public"."course_competencies"("courseId", "competencyId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "course_enrollments_courseId_personId_key" ON "public"."course_enrollments"("courseId", "personId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "reviews_assignmentId_weekStartDate_key" ON "public"."reviews"("assignmentId", "weekStartDate");
 
 -- CreateIndex
@@ -251,7 +315,16 @@ ALTER TABLE "public"."course_competencies" ADD CONSTRAINT "course_competencies_c
 ALTER TABLE "public"."course_competencies" ADD CONSTRAINT "course_competencies_competencyId_fkey" FOREIGN KEY ("competencyId") REFERENCES "public"."competencies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "public"."course_enrollments" ADD CONSTRAINT "course_enrollments_courseId_fkey" FOREIGN KEY ("courseId") REFERENCES "public"."courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."course_enrollments" ADD CONSTRAINT "course_enrollments_personId_fkey" FOREIGN KEY ("personId") REFERENCES "public"."people"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "public"."okrs" ADD CONSTRAINT "okrs_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."key_results" ADD CONSTRAINT "key_results_okrId_fkey" FOREIGN KEY ("okrId") REFERENCES "public"."okrs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."project_responsibilities" ADD CONSTRAINT "project_responsibilities_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -261,6 +334,9 @@ ALTER TABLE "public"."project_responsibilities" ADD CONSTRAINT "project_responsi
 
 -- AddForeignKey
 ALTER TABLE "public"."tasks" ADD CONSTRAINT "tasks_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "public"."projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."tasks" ADD CONSTRAINT "tasks_okrId_fkey" FOREIGN KEY ("okrId") REFERENCES "public"."okrs"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."tasks" ADD CONSTRAINT "tasks_assigneeId_fkey" FOREIGN KEY ("assigneeId") REFERENCES "public"."people"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -288,6 +364,9 @@ ALTER TABLE "public"."reviews" ADD CONSTRAINT "reviews_approvedById_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "public"."competency_deltas" ADD CONSTRAINT "competency_deltas_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "public"."reviews"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."person_reviews" ADD CONSTRAINT "person_reviews_personId_fkey" FOREIGN KEY ("personId") REFERENCES "public"."people"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."change_logs" ADD CONSTRAINT "change_logs_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "public"."users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

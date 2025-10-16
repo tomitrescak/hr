@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "public"."people" ADD COLUMN     "entryDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

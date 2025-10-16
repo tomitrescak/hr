@@ -34,11 +34,16 @@ const courseSchema = z.object({
   description: z.string().optional(),
   content: z.string().optional(),
   duration: z.string().transform(val => val ? parseInt(val, 10) : undefined).optional(),
-  maxEnrollments: z.string().transform(val => val ? parseInt(val, 10) : undefined).optional(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']),
 })
 
-type CourseFormData = z.infer<typeof courseSchema>
+type CourseFormData = {
+  name: string
+  description?: string
+  content?: string
+  duration?: string
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+}
 
 interface CourseEditPageProps {
   params: Promise<{
@@ -67,6 +72,13 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
     formState: { errors, isDirty },
   } = useForm<CourseFormData>({
     resolver: zodResolver(courseSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      content: '',
+      duration: '',
+      status: 'DRAFT' as const,
+    },
   })
 
   // Update form when course data loads
@@ -77,9 +89,8 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         description: course.description || '',
         content: course.content || '',
         duration: course.duration?.toString() || '',
-        maxEnrollments: course.maxEnrollments?.toString() || '',
         status: course.status,
-      } as any)
+      })
     }
   }, [course, reset])
 
@@ -135,7 +146,11 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
     try {
       await updateMutationWithRedirect.mutateAsync({
         id,
-        ...data,
+        name: data.name,
+        description: data.description,
+        content: data.content,
+        duration: data.duration ? parseInt(data.duration, 10) : undefined,
+        status: data.status,
       })
     } catch (error) {
       console.error('Failed to update course:', error)
@@ -285,32 +300,17 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duration (hours)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    placeholder="Enter duration in hours"
-                    {...register('duration')}
-                  />
-                  {errors.duration && (
-                    <p className="text-sm text-destructive">{errors.duration.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="maxEnrollments">Max Enrollments</Label>
-                  <Input
-                    id="maxEnrollments"
-                    type="number"
-                    placeholder="Enter maximum enrollments"
-                    {...register('maxEnrollments')}
-                  />
-                  {errors.maxEnrollments && (
-                    <p className="text-sm text-destructive">{errors.maxEnrollments.message}</p>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="duration">Duration (hours)</Label>
+                <Input
+                  id="duration"
+                  type="number"
+                  placeholder="Enter duration in hours"
+                  {...register('duration')}
+                />
+                {errors.duration && (
+                  <p className="text-sm text-destructive">{errors.duration.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -359,8 +359,17 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
           <CompetencyExtractor
             entityId={id}
             entityName={course.name}
-            content={`Course Name: ${course.name}\nDescription: ${course.description || 'N/A'}\nContent: ${course.content || 'N/A'}`}
-            contextMessage="Use AI to automatically identify and extract competencies from your course content. This will analyze the course description and content to suggest relevant competencies."
+            content={`Course: ${course.name}
+
+<description>
+${course.description  || ''}
+</description>
+
+<course_content>
+${course.content || ''}
+</course_content>
+`}
+            contextMessage="Use AI to automatically identify and extract competencies from this course. The analysis will examine the course description and detailed content to suggest relevant competencies and skills."
             onCompetencyAdded={() => refetch()}
             canManage={canManage}
             iconColor="text-purple-600"

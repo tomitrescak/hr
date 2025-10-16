@@ -288,9 +288,6 @@ export default function CoursesPage() {
                       <div className="flex items-center">
                         <Users className="h-4 w-4 mr-1 text-muted-foreground" />
                         {course._count.enrollments}
-                        {course.maxEnrollments && (
-                          <span className="text-muted-foreground">/{course.maxEnrollments}</span>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell>

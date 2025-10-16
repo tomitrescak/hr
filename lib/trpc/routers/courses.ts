@@ -104,7 +104,6 @@ export const coursesRouter = router({
         description: z.string().optional(),
         content: z.string().optional(),
         duration: z.number().int().positive().optional(),
-        maxEnrollments: z.number().int().positive().optional(),
         status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
         competencyIds: z.array(z.string()).optional().default([]),
       })
@@ -189,7 +188,6 @@ export const coursesRouter = router({
         description: z.string().optional(),
         content: z.string().optional(),
         duration: z.number().int().positive().optional(),
-        maxEnrollments: z.number().int().positive().optional(),
         status: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
         competencyIds: z.array(z.string()).optional(),
       })
@@ -376,12 +374,6 @@ export const coursesRouter = router({
         })
       }
 
-      if (course.maxEnrollments && course._count.enrollments >= course.maxEnrollments) {
-        throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'Course is full',
-        })
-      }
 
       // Check if already enrolled
       const existing = await ctx.db.courseEnrollment.findUnique({

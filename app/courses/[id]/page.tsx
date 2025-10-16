@@ -29,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress'
 import { AppLayout } from '@/components/layout/app-layout'
 import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
+import { marked } from 'marked'
 
 const courseStatusColors = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -108,6 +109,18 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
 
   const handleCompetencyClick = (competencyId: string) => {
     router.push(`/competencies/${competencyId}`)
+  }
+
+  // Markdown to HTML conversion using marked package
+  const markdownToHtml = (markdown: string): string => {
+    if (!markdown) return ''
+    
+    try {
+      return marked(markdown) as string
+    } catch (error) {
+      console.error('Error converting markdown to HTML:', error)
+      return `<p>${markdown}</p>`
+    }
   }
 
   if (isLoading) {
@@ -204,11 +217,6 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Enrollments</p>
                 <p className="text-2xl font-bold">{course._count.enrollments}</p>
-                {course.maxEnrollments && (
-                  <p className="text-xs text-muted-foreground">
-                    of {course.maxEnrollments} max
-                  </p>
-                )}
               </div>
               <Users className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -261,16 +269,21 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
         <CardContent className="space-y-4">
           {course.description && (
             <div>
-              <h3 className="font-medium text-sm text-muted-foreground">Description</h3>
-              <p className="mt-1 text-gray-700">{course.description}</p>
+              
+              <div 
+                className="mt-1 cv-content"
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(course.description) }}
+              />
             </div>
           )}
           {course.content && (
             <div>
-              <h3 className="font-medium text-sm text-muted-foreground">Course Content</h3>
-              <div className="mt-1 text-gray-700 whitespace-pre-wrap">
-                {course.content}
-              </div>
+                <h1 className="font-bold text-2xl text-muted-foreground">Course Content</h1>
+                <hr className="my-2 border-gray-300" />
+              <div 
+                className="mt-1 cv-content"
+                dangerouslySetInnerHTML={{ __html: markdownToHtml(course.content) }}
+              />
             </div>
           )}
         </CardContent>
