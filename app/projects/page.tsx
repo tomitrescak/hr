@@ -445,7 +445,7 @@ export default function ProjectsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="space-y-2">
-                        <Badge variant="outline">{project._count?.allocations || 0} members</Badge>
+                        {/* <Badge variant="outline">{project._count?.allocations || 0} members</Badge> */}
                         {(project as any).allocations && (project as any).allocations.length > 0 && (
                           <div className="flex flex-wrap gap-2">
                             {(project as any).allocations.map((allocation: any) => (
@@ -454,7 +454,7 @@ export default function ProjectsPage() {
                                   key={allocation.id}
                                   personId={allocation.person.id}
                                   name={allocation.person.name}
-                                  size={64}
+                                  size={48}
                                 />
                               )
                             ))}
