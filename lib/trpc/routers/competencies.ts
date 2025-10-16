@@ -161,7 +161,7 @@ export const competenciesRouter = router({
         const existing = await ctx.db.competency.findFirst({
           where: {
             name: filteredUpdates.name,
-            type: filteredUpdates.type || current.type,
+            type: (filteredUpdates.type as any) || current.type,
             id: { not: id },
           },
         })

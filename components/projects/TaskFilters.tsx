@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Search, Filter, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -22,8 +22,8 @@ interface Task {
   id: string
   title: string
   description?: string | null
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | null
-  state: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | null
+  state: 'BACKLOG' | 'READY' | 'IN_PROGRESS' | 'BLOCKED' | 'REVIEW' | 'DONE'
   dueDate?: Date | null
   assignee?: {
     id: string
@@ -101,7 +101,7 @@ export function TaskFilters({ tasks, onFilteredTasksChange, people }: TaskFilter
   }, [tasks, filters])
 
   // Update parent component when filtered tasks change
-  useMemo(() => {
+  useEffect(() => {
     onFilteredTasksChange(filteredTasks)
   }, [filteredTasks, onFilteredTasksChange])
 
@@ -194,7 +194,6 @@ export function TaskFilters({ tasks, onFilteredTasksChange, people }: TaskFilter
                     <SelectItem value="LOW">Low</SelectItem>
                     <SelectItem value="MEDIUM">Medium</SelectItem>
                     <SelectItem value="HIGH">High</SelectItem>
-                    <SelectItem value="URGENT">Urgent</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -208,9 +207,11 @@ export function TaskFilters({ tasks, onFilteredTasksChange, people }: TaskFilter
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">All statuses</SelectItem>
-                    <SelectItem value="TODO">To Do</SelectItem>
+                    <SelectItem value="BACKLOG">Backlog</SelectItem>
+                    <SelectItem value="READY">Ready</SelectItem>
                     <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                    <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                    <SelectItem value="BLOCKED">Blocked</SelectItem>
+                    <SelectItem value="REVIEW">Review</SelectItem>
                     <SelectItem value="DONE">Done</SelectItem>
                   </SelectContent>
                 </Select>
@@ -240,7 +241,7 @@ export function TaskFilters({ tasks, onFilteredTasksChange, people }: TaskFilter
           <span className="text-muted-foreground">Active filters:</span>
           {filters.search && (
             <Badge variant="secondary" className="flex items-center space-x-1">
-              <span>Search: "{filters.search}"</span>
+              <span>Search: &quot;{filters.search}&quot;</span>
               <button onClick={() => updateFilter('search', '')}>
                 <X className="h-3 w-3" />
               </button>
@@ -270,9 +271,11 @@ export function TaskFilters({ tasks, onFilteredTasksChange, people }: TaskFilter
           {filters.state && (
             <Badge variant="secondary" className="flex items-center space-x-1">
               <span>
-                Status: {filters.state === 'TODO' ? 'To Do' : 
+                Status: {filters.state === 'BACKLOG' ? 'Backlog' : 
+                        filters.state === 'READY' ? 'Ready' :
                         filters.state === 'IN_PROGRESS' ? 'In Progress' :
-                        filters.state === 'IN_REVIEW' ? 'In Review' : 'Done'}
+                        filters.state === 'BLOCKED' ? 'Blocked' :
+                        filters.state === 'REVIEW' ? 'Review' : 'Done'}
               </span>
               <button onClick={() => updateFilter('state', '')}>
                 <X className="h-3 w-3" />

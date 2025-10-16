@@ -6,7 +6,7 @@ import { use } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, Loader2, Calendar, User, FileText } from 'lucide-react'
+import { ArrowLeft, Loader2, FileText } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,14 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AppLayout } from '@/components/layout/app-layout'
 
 const projectSchema = z.object({
   name: z.string().min(2, 'Project name must be at least 2 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  startDate: z.string().min(1, 'Start date is required'),
-  endDate: z.string().optional(),
-  managerId: z.string().min(1, 'Project manager is required'),
-  status: z.enum(['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED']),
+  status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD', 'PLANNING']),
 })
 
 type ProjectFormData = z.infer<typeof projectSchema>
@@ -47,22 +45,15 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
     resolver: zodResolver(projectSchema),
   })
 
-  const watchedManagerId = watch('managerId')
-  const watchedStatus = watch('status')
-
   // Fetch project data
   const { data: project, isLoading } = trpc.projects.getById.useQuery({ id })
-  const { data: people } = trpc.projects.getPeople.useQuery()
 
   // Set form values when project data loads
   useEffect(() => {
     if (project) {
       setValue('name', project.name)
       setValue('description', project.description || '')
-      setValue('startDate', project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '')
-      setValue('endDate', project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '')
-      setValue('managerId', project.managerId)
-      setValue('status', project.status as any)
+      setValue('status', project.status || 'ACTIVE')
     }
   }, [project, setValue])
 
@@ -82,9 +73,6 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         id,
         name: data.name,
         description: data.description,
-        startDate: new Date(data.startDate),
-        endDate: data.endDate ? new Date(data.endDate) : undefined,
-        managerId: data.managerId,
         status: data.status,
       })
     } finally {
@@ -94,17 +82,17 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <AppLayout>
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   if (!project) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <AppLayout>
         <div className="text-center">
           <h1 className="text-2xl font-bold text-muted-foreground">Project not found</h1>
           <Button onClick={() => router.push('/projects')} className="mt-4">
@@ -112,12 +100,13 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
             Back to Projects
           </Button>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <AppLayout>
+      <div className="max-w-4xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-4">
@@ -174,84 +163,21 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
 
-            {/* Date Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="startDate" className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>Start Date</span>
-                </Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  {...register('startDate')}
-                />
-                {errors.startDate && (
-                  <p className="text-sm text-destructive">{errors.startDate.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="endDate" className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>End Date (Optional)</span>
-                </Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  {...register('endDate')}
-                />
-                {errors.endDate && (
-                  <p className="text-sm text-destructive">{errors.endDate.message}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Project Manager */}
-            <div className="space-y-2">
-              <Label htmlFor="managerId" className="flex items-center space-x-2">
-                <User className="h-4 w-4" />
-                <span>Project Manager</span>
-              </Label>
-              <Select
-                value={watchedManagerId}
-                onValueChange={(value) => setValue('managerId', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select project manager" />
-                </SelectTrigger>
-                <SelectContent>
-                  {people?.map(person => (
-                    <SelectItem key={person.id} value={person.id}>
-                      <div>
-                        <div className="font-medium">{person.name}</div>
-                        <div className="text-xs text-muted-foreground">{person.email}</div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.managerId && (
-                <p className="text-sm text-destructive">{errors.managerId.message}</p>
-              )}
-            </div>
-
             {/* Status */}
             <div className="space-y-2">
               <Label htmlFor="status">Project Status</Label>
               <Select
-                value={watchedStatus}
+                value={watch('status')}
                 onValueChange={(value) => setValue('status', value as any)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select project status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PLANNING">Planning</SelectItem>
                   <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="PLANNING">Planning</SelectItem>
                   <SelectItem value="ON_HOLD">On Hold</SelectItem>
                   <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
               {errors.status && (
@@ -259,12 +185,13 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
 
+
             {/* Submit Buttons */}
             <div className="flex justify-end space-x-3 pt-6">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/projects/${params.id}`)}
+                onClick={() => router.push(`/projects/${id}`)}
                 disabled={isSubmitting}
               >
                 Cancel
@@ -277,6 +204,7 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
           </form>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

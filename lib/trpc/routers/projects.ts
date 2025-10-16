@@ -8,6 +8,17 @@ export const projectsRouter = router({
     const projects = await ctx.db.project.findMany({
       include: {
         okrs: {
+          include: {
+            keyResults: {
+              orderBy: { createdAt: 'asc' },
+            },
+            _count: {
+              select: {
+                keyResults: true,
+                tasks: true,
+              },
+            },
+          },
           orderBy: { createdAt: 'asc' },
         },
         responsibilities: {
@@ -62,6 +73,22 @@ export const projectsRouter = router({
         where: { id: input.id },
         include: {
           okrs: {
+            include: {
+              keyResults: {
+                orderBy: { createdAt: 'asc' },
+              },
+          tasks: {
+            include: {
+              assignee: {
+                select: { id: true, name: true },
+              },
+              okr: {
+                select: { id: true, title: true },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+            },
             orderBy: { createdAt: 'asc' },
           },
           responsibilities: {
@@ -151,6 +178,7 @@ export const projectsRouter = router({
         id: z.string(),
         name: z.string().min(2).optional(),
         description: z.string().min(10).optional(),
+        status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD', 'PLANNING']).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -325,11 +353,103 @@ export const projectsRouter = router({
       return { success: true }
     }),
 
+  // Manage Key Results
+  createKeyResult: pmProcedure
+    .input(
+      z.object({
+        okrId: z.string(),
+        title: z.string().min(2),
+        description: z.string().optional(),
+        target: z.string().optional(),
+        metric: z.string().optional(),
+        dueDate: z.string().optional().transform((val) => val ? new Date(val) : undefined),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const keyResult = await ctx.db.keyResult.create({
+        data: input,
+      })
+
+      await ctx.db.changeLog.create({
+        data: {
+          entity: 'KEY_RESULT',
+          entityId: keyResult.id,
+          field: 'created',
+          toValue: input,
+          state: 'CREATED',
+          changedById: ctx.session.user.id,
+        },
+      })
+
+      return keyResult
+    }),
+
+  updateKeyResult: pmProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        title: z.string().min(2).optional(),
+        description: z.string().optional(),
+        progress: z.number().min(0).max(100).optional(),
+        target: z.string().optional(),
+        metric: z.string().optional(),
+        dueDate: z.string().optional().transform((val) => val ? new Date(val) : undefined),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...updates } = input
+
+      const current = await ctx.db.keyResult.findUnique({ where: { id } })
+      if (!current) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Key Result not found',
+        })
+      }
+
+      const filteredUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, v]) => v !== undefined)
+      )
+
+      const keyResult = await ctx.db.keyResult.update({
+        where: { id },
+        data: filteredUpdates,
+      })
+
+      await ctx.db.changeLog.create({
+        data: {
+          entity: 'KEY_RESULT',
+          entityId: id,
+          field: Object.keys(filteredUpdates).join(', '),
+          fromValue: Object.keys(filteredUpdates).reduce((acc, key) => {
+            acc[key] = current[key as keyof typeof current]
+            return acc
+          }, {} as any),
+          toValue: filteredUpdates,
+          state: 'MODIFIED',
+          changedById: ctx.session.user.id,
+        },
+      })
+
+      return keyResult
+    }),
+
+  deleteKeyResult: pmProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.keyResult.delete({
+        where: { id: input.id },
+      })
+
+      return { success: true }
+    }),
+
   // Manage tasks
   createTask: pmProcedure
     .input(
       z.object({
         projectId: z.string(),
+        okrId: z.string().optional(),
         title: z.string().min(2),
         description: z.string().optional(),
         assigneeId: z.string().optional(),
@@ -343,6 +463,9 @@ export const projectsRouter = router({
         include: {
           assignee: {
             select: { id: true, name: true },
+          },
+          okr: {
+            select: { id: true, title: true },
           },
           project: {
             select: { id: true, name: true },
@@ -371,6 +494,7 @@ export const projectsRouter = router({
         title: z.string().min(2).optional(),
         description: z.string().optional(),
         assigneeId: z.string().optional(),
+        okrId: z.string().optional(),
         priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
         state: z.enum(['BACKLOG', 'READY', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE']).optional(),
         dueDate: z.date().optional(),
@@ -417,6 +541,9 @@ export const projectsRouter = router({
         include: {
           assignee: {
             select: { id: true, name: true },
+          },
+          okr: {
+            select: { id: true, title: true },
           },
           project: {
             select: { id: true, name: true },
@@ -652,6 +779,9 @@ export const projectsRouter = router({
         include: {
           assignee: {
             select: { id: true, name: true },
+          },
+          okr: {
+            select: { id: true, title: true },
           },
           project: {
             select: { id: true, name: true },

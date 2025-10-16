@@ -1,8 +1,294 @@
 import { z } from 'zod'
 import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
+import { Role } from '@prisma/client'
+import * as bcrypt from 'bcryptjs'
 
 export const peopleRouter = router({
+  // Create new person (PM only)
+  create: pmProcedure
+    .input(
+      z.object({
+        name: z.string().min(2),
+        email: z.string().email(),
+        password: z.string().min(6),
+        role: z.enum(['USER', 'PROJECT_MANAGER']).default('USER'),
+        entryDate: z.string().datetime().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if email is already taken
+      const existingUser = await ctx.db.user.findUnique({
+        where: { email: input.email },
+      })
+
+      if (existingUser) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Email already in use',
+        })
+      }
+
+      // Hash the password with bcrypt
+      const passwordHash = await bcrypt.hash(input.password, 12)
+
+      const entryDate = input.entryDate ? new Date(input.entryDate) : new Date()
+
+      // Create user and person in a transaction
+      const result = await ctx.db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            name: input.name,
+            role: input.role as Role,
+          },
+        })
+
+        const person = await tx.person.create({
+          data: {
+            userId: user.id,
+            name: input.name,
+            email: input.email,
+            role: input.role as Role,
+            entryDate,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+                createdAt: true,
+              },
+            },
+          },
+        })
+
+        return person
+      })
+
+      // Create change log entry
+      await ctx.db.changeLog.create({
+        data: {
+          entity: 'PERSON',
+          entityId: result.id,
+          field: 'created',
+          fromValue: {},
+          toValue: {
+            name: input.name,
+            email: input.email,
+            role: input.role,
+            entryDate: entryDate.toISOString(),
+          },
+          state: 'CREATED',
+          changedById: ctx.session.user.id,
+        },
+      })
+
+      return result
+    }),
+
+  // Deactivate person (PM only)
+  deactivate: pmProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        alternativeEmail: z.string().email().optional(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, alternativeEmail, reason } = input
+
+      const currentPerson = await ctx.db.person.findUnique({
+        where: { id },
+        include: { user: true },
+      })
+
+      if (!currentPerson) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Person not found',
+        })
+      }
+
+      if (!currentPerson.isActive) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Person is already inactive',
+        })
+      }
+
+      // Update person record in a transaction
+      const [updatedPerson] = await ctx.db.$transaction([
+        ctx.db.person.update({
+          where: { id },
+          data: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            alternativeEmail: alternativeEmail || undefined,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        }),
+        // Create change log entry
+        ctx.db.changeLog.create({
+          data: {
+            entity: 'PERSON',
+            entityId: id,
+            field: 'status',
+            fromValue: { isActive: true },
+            toValue: {
+              isActive: false,
+              deactivatedAt: new Date().toISOString(),
+              alternativeEmail: alternativeEmail || null,
+              reason: reason || null,
+            },
+            state: 'MODIFIED',
+            changedById: ctx.session.user.id,
+          },
+        }),
+      ])
+
+      return updatedPerson
+    }),
+
+  // Reactivate person (PM only)
+  reactivate: pmProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id } = input
+
+      const currentPerson = await ctx.db.person.findUnique({
+        where: { id },
+        include: { user: true },
+      })
+
+      if (!currentPerson) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Person not found',
+        })
+      }
+
+      if (currentPerson.isActive) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Person is already active',
+        })
+      }
+
+      // Update person record in a transaction
+      const [updatedPerson] = await ctx.db.$transaction([
+        ctx.db.person.update({
+          where: { id },
+          data: {
+            isActive: true,
+            deactivatedAt: null,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        }),
+        // Create change log entry
+        ctx.db.changeLog.create({
+          data: {
+            entity: 'PERSON',
+            entityId: id,
+            field: 'status',
+            fromValue: { isActive: false },
+            toValue: { isActive: true },
+            state: 'MODIFIED',
+            changedById: ctx.session.user.id,
+          },
+        }),
+      ])
+
+      return updatedPerson
+    }),
+
+  // Delete person permanently (PM only - use with extreme caution)
+  delete: pmProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        confirmEmail: z.string().email(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, confirmEmail } = input
+
+      const currentPerson = await ctx.db.person.findUnique({
+        where: { id },
+        include: { user: true },
+      })
+
+      if (!currentPerson) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Person not found',
+        })
+      }
+
+      // Verify email confirmation matches
+      if (currentPerson.email !== confirmEmail) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Email confirmation does not match',
+        })
+      }
+
+      // Prevent deletion of the current user
+      if (currentPerson.userId === ctx.session.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Cannot delete your own account',
+        })
+      }
+
+      // Create change log entry before deletion
+      await ctx.db.changeLog.create({
+        data: {
+          entity: 'PERSON',
+          entityId: id,
+          field: 'deleted',
+          fromValue: {
+            name: currentPerson.name,
+            email: currentPerson.email,
+            role: currentPerson.role,
+          },
+          toValue: { deleted: true },
+          state: 'MODIFIED',
+          changedById: ctx.session.user.id,
+        },
+      })
+
+      // Delete the user (this will cascade to person due to schema constraint)
+      await ctx.db.user.delete({
+        where: { id: currentPerson.userId },
+      })
+
+      return { success: true, deleted: currentPerson }
+    }),
+
   // Get all people (anyone can view)
   list: protectedProcedure.query(async ({ ctx }) => {
     const people = await ctx.db.person.findMany({
@@ -91,13 +377,7 @@ export const peopleRouter = router({
                   course: { select: { name: true } },
                 },
               },
-              competencyDeltas: {
-                include: {
-                  competency: {
-                    select: { name: true, type: true },
-                  },
-                },
-              },
+              competencyDeltas: true,
             },
             orderBy: { submittedAt: 'desc' },
             take: 10,
@@ -138,6 +418,8 @@ export const peopleRouter = router({
       z.object({
         name: z.string().min(2).optional(),
         email: z.string().email().optional(),
+        entryDate: z.string().datetime().optional(),
+        cv: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -180,6 +462,14 @@ export const peopleRouter = router({
 
         updates.email = input.email
         userUpdates.email = input.email
+      }
+
+      if (input.entryDate && new Date(input.entryDate).getTime() !== currentUser.person.entryDate.getTime()) {
+        updates.entryDate = new Date(input.entryDate)
+      }
+
+      if (input.cv !== undefined && input.cv !== currentUser.person.cv) {
+        updates.cv = input.cv
       }
 
       if (Object.keys(updates).length === 0) {
@@ -242,6 +532,8 @@ export const peopleRouter = router({
         name: z.string().min(2).optional(),
         email: z.string().email().optional(),
         role: z.enum(['USER', 'PROJECT_MANAGER']).optional(),
+        entryDate: z.string().datetime().optional(),
+        cv: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -287,6 +579,14 @@ export const peopleRouter = router({
       if (updates.role && updates.role !== currentPerson.role) {
         personUpdates.role = updates.role
         userUpdates.role = updates.role
+      }
+
+      if (updates.entryDate && new Date(updates.entryDate).getTime() !== currentPerson.entryDate.getTime()) {
+        personUpdates.entryDate = new Date(updates.entryDate)
+      }
+
+      if (updates.cv !== undefined && updates.cv !== currentPerson.cv) {
+        personUpdates.cv = updates.cv
       }
 
       if (Object.keys(personUpdates).length === 0) {
@@ -343,7 +643,7 @@ export const peopleRouter = router({
       z.object({
         personId: z.string(),
         competencyId: z.string(),
-        proficiency: z.enum(['BEGINNER', 'NOVICE', 'COMPETENT', 'PROFICIENT', 'EXPERT']).optional(),
+        proficiency: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -376,7 +676,7 @@ export const peopleRouter = router({
       }
 
       // Only SKILL, TECH_TOOL, and ABILITY competencies should have proficiency
-      const shouldHaveProficiency = ['SKILL', 'TECH_TOOL', 'ABILITY'].includes(competency.type)
+      const shouldHaveProficiency = ['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE'].includes(competency.type)
       
       if (proficiency && !shouldHaveProficiency) {
         throw new TRPCError({
@@ -429,8 +729,8 @@ export const peopleRouter = router({
           entity: 'PERSON_COMPETENCY',
           entityId: result.id,
           field: 'proficiency',
-          fromValue: existing?.proficiency || null,
-          toValue: finalProficiency,
+          fromValue: (existing?.proficiency || null) as any,
+          toValue: finalProficiency as any,
           state: existing ? 'MODIFIED' : 'CREATED',
           changedById: ctx.session.user.id,
         },
@@ -539,5 +839,160 @@ export const peopleRouter = router({
       })
 
       return history
+    }),
+
+  // Search people by competencies
+  searchByCompetencies: protectedProcedure
+    .input(
+      z.object({
+        competencyIds: z.array(z.string()).min(1),
+        minMatchPercentage: z.number().min(0).max(100).default(75),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { competencyIds, minMatchPercentage } = input
+
+      // Get all people with their competencies
+      const peopleWithCompetencies = await ctx.db.person.findMany({
+        include: {
+          competencies: {
+            include: {
+              competency: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+      })
+
+      // Filter and calculate match percentages
+      const results = peopleWithCompetencies
+        .map((person) => {
+          const personCompetencyIds = person.competencies.map(pc => pc.competency.id)
+          const matchingCompetencyIds = competencyIds.filter(id => personCompetencyIds.includes(id))
+          const matchPercentage = Math.round((matchingCompetencyIds.length / competencyIds.length) * 100)
+
+          if (matchPercentage < minMatchPercentage) {
+            return null
+          }
+
+          const matchingCompetencies = person.competencies
+            .filter(pc => competencyIds.includes(pc.competency.id))
+            .map(pc => ({
+              ...pc.competency,
+              proficiency: pc.proficiency,
+            }))
+
+          return {
+            id: person.id,
+            name: person.name,
+            email: person.email,
+            entryDate: person.entryDate,
+            matchPercentage,
+            matchingCompetencies,
+            totalCompetencies: person.competencies.length,
+          }
+        })
+        .filter((person): person is NonNullable<typeof person> => person !== null)
+        .sort((a, b) => b.matchPercentage - a.matchPercentage) // Sort by match percentage descending
+
+      return results
+    }),
+
+  // Get tasks for a person
+  getTasksForPerson: protectedProcedure
+    .input(z.object({ personId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Check if user can view this person's tasks
+      if (ctx.session.user.role !== 'PROJECT_MANAGER') {
+        const userPerson = await ctx.db.person.findUnique({
+          where: { userId: ctx.session.user.id },
+        })
+
+        if (!userPerson || userPerson.id !== input.personId) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You can only view your own tasks',
+          })
+        }
+      }
+
+      const tasks = await ctx.db.task.findMany({
+        where: { assigneeId: input.personId },
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+            },
+          },
+        },
+        orderBy: [
+          { state: 'asc' },
+          { createdAt: 'desc' },
+        ],
+      })
+
+      // Group tasks by project and status
+      const tasksByProject = new Map<string, {
+        project: { id: string; name: string; description: string }
+        tasks: typeof tasks
+      }>()
+
+      const tasksByStatus = {
+        active: [] as typeof tasks,
+        completed: [] as typeof tasks,
+      }
+
+      tasks.forEach(task => {
+        // Group by project
+        if (task.project) {
+          const projectKey = task.project.id
+          if (!tasksByProject.has(projectKey)) {
+            tasksByProject.set(projectKey, {
+              project: task.project,
+              tasks: [],
+            })
+          }
+          tasksByProject.get(projectKey)!.tasks.push(task)
+        }
+
+        // Group by status
+        if (task.state === 'DONE') {
+          tasksByStatus.completed.push(task)
+        } else {
+          tasksByStatus.active.push(task)
+        }
+      })
+
+      return {
+        allTasks: tasks,
+        tasksByProject: Array.from(tasksByProject.values()),
+        tasksByStatus,
+        summary: {
+          total: tasks.length,
+          active: tasksByStatus.active.length,
+          completed: tasksByStatus.completed.length,
+          byState: {
+            BACKLOG: tasks.filter(t => t.state === 'BACKLOG').length,
+            READY: tasks.filter(t => t.state === 'READY').length,
+            IN_PROGRESS: tasks.filter(t => t.state === 'IN_PROGRESS').length,
+            BLOCKED: tasks.filter(t => t.state === 'BLOCKED').length,
+            REVIEW: tasks.filter(t => t.state === 'REVIEW').length,
+            DONE: tasks.filter(t => t.state === 'DONE').length,
+          },
+          byPriority: {
+            LOW: tasks.filter(t => t.priority === 'LOW').length,
+            MEDIUM: tasks.filter(t => t.priority === 'MEDIUM').length,
+            HIGH: tasks.filter(t => t.priority === 'HIGH').length,
+          },
+        },
+      }
     }),
 })

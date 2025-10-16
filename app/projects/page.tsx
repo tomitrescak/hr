@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ProjectsSummaryAnalytics } from '@/components/projects/ProjectsSummaryAnalytics'
+import { AppLayout } from '@/components/layout/app-layout'
 
 export default function ProjectsPage() {
   const { data: session } = useSession()
@@ -79,18 +80,19 @@ export default function ProjectsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <AppLayout>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 rounded w-1/4"></div>
           <div className="h-32 bg-gray-200 rounded"></div>
           <div className="h-64 bg-gray-200 rounded"></div>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <AppLayout>
+      <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -163,7 +165,7 @@ export default function ProjectsPage() {
 
         {/* Summary Analytics */}
         {projects && projects.length > 0 && (
-          <ProjectsSummaryAnalytics projects={projects} />
+          <ProjectsSummaryAnalytics projects={projects as any} />
         )}
 
         {/* Projects Grid */}
@@ -298,6 +300,7 @@ export default function ProjectsPage() {
             ))}
           </div>
         )}
-    </div>
+      </div>
+    </AppLayout>
   )
 }

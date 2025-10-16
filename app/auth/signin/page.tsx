@@ -122,36 +122,6 @@ export default function SignInPage() {
             </form>
           </CardContent>
         </Card>
-
-        {/* Demo Credentials */}
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader>
-            <CardTitle className="text-sm text-blue-900">Demo Credentials</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm">
-                <User className="h-4 w-4 text-blue-600" />
-                <span className="font-medium text-blue-900">Project Manager</span>
-              </div>
-              <div className="text-xs text-blue-700 ml-6">
-                <div>Email: alice@example.com</div>
-                <div>Password: password123</div>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm">
-                <User className="h-4 w-4 text-blue-600" />
-                <span className="font-medium text-blue-900">Regular User</span>
-              </div>
-              <div className="text-xs text-blue-700 ml-6">
-                <div>Email: bob@example.com</div>
-                <div>Password: password123</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

@@ -6,6 +6,9 @@ import { coursesRouter } from './routers/courses'
 import { projectsRouter } from './routers/projects'
 import { assignmentsRouter } from './routers/assignments'
 import { reviewsRouter } from './routers/reviews'
+import { personReviewsRouter } from './routers/person-reviews'
+import { dashboardRouter } from './routers/dashboard'
+import { extractionRouter } from './routers/extraction'
 
 export const appRouter = router({
   auth: authRouter,
@@ -15,6 +18,9 @@ export const appRouter = router({
   projects: projectsRouter,
   assignments: assignmentsRouter,
   reviews: reviewsRouter,
+  personReviews: personReviewsRouter,
+  dashboard: dashboardRouter,
+  extraction: extractionRouter,
 })
 
 export type AppRouter = typeof appRouter

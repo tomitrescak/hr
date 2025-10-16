@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useState } from 'react'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
@@ -22,10 +22,11 @@ import {
 const taskSchema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   assigneeId: z.string().optional(),
+  okrId: z.string().optional(),
   dueDate: z.string().optional(),
-  state: z.enum(['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE']),
+  state: z.enum(['BACKLOG', 'READY', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE']),
 })
 
 type TaskFormData = z.infer<typeof taskSchema>
@@ -37,6 +38,11 @@ interface EditTaskFormProps {
     description?: string | null
     priority: string
     assigneeId?: string | null
+    okrId?: string | null
+    okr?: {
+      id: string
+      title: string
+    } | null
     dueDate?: Date | null
     state: string
   }
@@ -48,31 +54,29 @@ export function EditTaskForm({ task, projectId, onSuccess }: EditTaskFormProps) 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { addToast } = useToast()
 
+  // Prepare default values from the task prop
+  const defaultValues: TaskFormData = {
+    title: task.title,
+    description: task.description || '',
+    priority: (task.priority as 'LOW' | 'MEDIUM' | 'HIGH') || 'MEDIUM',
+    assigneeId: task.assigneeId || undefined,
+    okrId: task.okrId || undefined,
+    dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+    state: (task.state as 'BACKLOG' | 'READY' | 'IN_PROGRESS' | 'BLOCKED' | 'REVIEW' | 'DONE') || 'BACKLOG',
+  }
+
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
+    defaultValues,
   })
 
-  const watchedPriority = watch('priority')
-  const watchedAssigneeId = watch('assigneeId')
-  const watchedState = watch('state')
-
   const { data: people } = trpc.projects.getPeople.useQuery()
-
-  // Set initial values
-  useEffect(() => {
-    setValue('title', task.title)
-    setValue('description', task.description || '')
-    setValue('priority', task.priority as any)
-    setValue('assigneeId', task.assigneeId || undefined)
-    setValue('dueDate', task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '')
-    setValue('state', task.state as any)
-  }, [task, setValue])
+  const { data: project } = trpc.projects.getById.useQuery({ id: projectId })
 
   const updateMutation = trpc.projects.updateTask.useMutation({
     onSuccess: () => {
@@ -93,6 +97,7 @@ export function EditTaskForm({ task, projectId, onSuccess }: EditTaskFormProps) 
         description: data.description,
         priority: data.priority,
         assigneeId: data.assigneeId || undefined,
+        okrId: data.okrId || undefined,
         dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
         state: data.state,
       })
@@ -133,20 +138,22 @@ export function EditTaskForm({ task, projectId, onSuccess }: EditTaskFormProps) 
       {/* Priority */}
       <div className="space-y-2">
         <Label htmlFor="priority">Priority</Label>
-        <Select
-          value={watchedPriority}
-          onValueChange={(value) => setValue('priority', value as any)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select priority" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="LOW">Low</SelectItem>
-            <SelectItem value="MEDIUM">Medium</SelectItem>
-            <SelectItem value="HIGH">High</SelectItem>
-            <SelectItem value="URGENT">Urgent</SelectItem>
-          </SelectContent>
-        </Select>
+        <Controller
+          name="priority"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="LOW">Low</SelectItem>
+                <SelectItem value="MEDIUM">Medium</SelectItem>
+                <SelectItem value="HIGH">High</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
         {errors.priority && (
           <p className="text-sm text-destructive">{errors.priority.message}</p>
         )}
@@ -155,20 +162,25 @@ export function EditTaskForm({ task, projectId, onSuccess }: EditTaskFormProps) 
       {/* State */}
       <div className="space-y-2">
         <Label htmlFor="state">Status</Label>
-        <Select
-          value={watchedState}
-          onValueChange={(value) => setValue('state', value as any)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODO">To Do</SelectItem>
-            <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-            <SelectItem value="IN_REVIEW">In Review</SelectItem>
-            <SelectItem value="DONE">Done</SelectItem>
-          </SelectContent>
-        </Select>
+        <Controller
+          name="state"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BACKLOG">Backlog</SelectItem>
+                <SelectItem value="READY">Ready</SelectItem>
+                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                <SelectItem value="BLOCKED">Blocked</SelectItem>
+                <SelectItem value="REVIEW">Review</SelectItem>
+                <SelectItem value="DONE">Done</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
         {errors.state && (
           <p className="text-sm text-destructive">{errors.state.message}</p>
         )}
@@ -177,29 +189,67 @@ export function EditTaskForm({ task, projectId, onSuccess }: EditTaskFormProps) 
       {/* Assignee */}
       <div className="space-y-2">
         <Label htmlFor="assigneeId">Assignee</Label>
-        <Select
-          value={watchedAssigneeId}
-          onValueChange={(value) => setValue('assigneeId', value === 'unassigned' ? undefined : value)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select assignee" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {people?.map(person => (
-              <SelectItem key={person.id} value={person.id}>
-                <div>
-                  <div className="font-medium">{person.name}</div>
-                  <div className="text-xs text-muted-foreground">{person.email}</div>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Controller
+          name="assigneeId"
+          control={control}
+          render={({ field }) => (
+            <Select 
+              value={field.value || "unassigned"} 
+              onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select assignee" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {people?.map(person => (
+                  <SelectItem key={person.id} value={person.id}>
+                    <div>
+                      <div className="font-medium">{person.name}</div>
+                      <div className="text-xs text-muted-foreground">{person.email}</div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
         {errors.assigneeId && (
           <p className="text-sm text-destructive">{errors.assigneeId.message}</p>
         )}
       </div>
+
+      {/* OKR Assignment */}
+      {project?.okrs && project.okrs.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="okrId">Assign to OKR (Optional)</Label>
+          <Controller
+            name="okrId"
+            control={control}
+            render={({ field }) => (
+              <Select 
+                value={field.value || "none"} 
+                onValueChange={(value) => field.onChange(value === 'none' ? undefined : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select OKR" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No OKR</SelectItem>
+                  {project.okrs.map(okr => (
+                    <SelectItem key={okr.id} value={okr.id}>
+                      {okr.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.okrId && (
+            <p className="text-sm text-destructive">{errors.okrId.message}</p>
+          )}
+        </div>
+      )}
 
       {/* Due Date */}
       <div className="space-y-2">

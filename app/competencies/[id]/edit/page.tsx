@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { use } from 'react'
 import { useSession } from 'next-auth/react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AppLayout } from '@/components/layout/app-layout'
 
 const competencySchema = z.object({
   type: z.enum(['KNOWLEDGE', 'SKILL', 'TECH_TOOL', 'ABILITY', 'VALUE', 'BEHAVIOUR', 'ENABLER']),
@@ -110,7 +111,7 @@ export default function EditCompetencyPage({ params }: EditCompetencyPageProps) 
       <div className="p-6">
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold text-gray-900">Access Denied</h2>
-          <p className="text-gray-600 mt-2">You don't have permission to edit competencies.</p>
+          <p className="text-gray-600 mt-2">You don&apos;t have permission to edit competencies.</p>
           <Button onClick={() => router.push('/competencies')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Competencies
@@ -137,7 +138,7 @@ export default function EditCompetencyPage({ params }: EditCompetencyPageProps) 
       <div className="p-6">
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold text-gray-900">Competency not found</h2>
-          <p className="text-gray-600 mt-2">The competency you're trying to edit doesn't exist.</p>
+          <p className="text-gray-600 mt-2">The competency you&apos;re trying to edit doesn&apos;t exist.</p>
           <Button onClick={() => router.push('/competencies')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Competencies

@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { AppLayout } from '@/components/layout/app-layout'
 
 const competencyTypeColors = {
   KNOWLEDGE: 'bg-blue-100 text-blue-800',
@@ -77,33 +78,34 @@ export default function CompetencyDetailPage({ params }: CompetencyDetailPagePro
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <AppLayout>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 rounded w-1/4"></div>
           <div className="h-32 bg-gray-200 rounded"></div>
           <div className="h-64 bg-gray-200 rounded"></div>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   if (!competency) {
     return (
-      <div className="p-6">
+      <AppLayout>
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold text-gray-900">Competency not found</h2>
-          <p className="text-gray-600 mt-2">The competency you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mt-2">The competency you&apos;re looking for doesn&apos;t exist.</p>
           <Button onClick={() => router.push('/competencies')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Competencies
           </Button>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <AppLayout>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -312,6 +314,7 @@ export default function CompetencyDetailPage({ params }: CompetencyDetailPagePro
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

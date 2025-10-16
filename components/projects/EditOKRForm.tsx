@@ -58,7 +58,7 @@ export function EditOKRForm({ okr, projectId, onSuccess }: EditOKRFormProps) {
     setValue('dueDate', okr.dueDate ? new Date(okr.dueDate).toISOString().split('T')[0] : '')
   }, [okr, setValue])
 
-  const updateMutation = trpc.projects.updateOKR.useMutation({
+  const updateMutation = trpc.projects.updateOkr.useMutation({
     onSuccess: () => {
       onSuccess?.()
     },
@@ -75,8 +75,7 @@ export function EditOKRForm({ okr, projectId, onSuccess }: EditOKRFormProps) {
         title: data.title,
         description: data.description,
         metric: data.metric,
-        target: data.target,
-        current: data.current,
+        target: data.target.toString(),
         dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
       })
     } finally {

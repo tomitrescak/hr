@@ -234,8 +234,8 @@ export const reviewsRouter = router({
                 entity: 'PERSON_COMPETENCY',
                 entityId: `${assignment.person.id}-${delta.competencyId}`,
                 field: 'proficiency',
-                fromValue: null, // Could track previous value if needed
-                toValue: delta.newProficiency,
+                fromValue: null as any, // Could track previous value if needed
+                toValue: delta.newProficiency as any,
                 state: 'MODIFIED',
                 changedById: ctx.session.user.id,
               }
@@ -250,11 +250,11 @@ export const reviewsRouter = router({
           entity: 'REVIEW',
           entityId: review.id,
           field: 'updated',
-          fromValue: null,
+          fromValue: null as any,
           toValue: {
             status: input.status,
             competencyDeltas: input.competencyDeltas?.length || 0,
-          },
+          } as any,
           state: 'MODIFIED',
           changedById: ctx.session.user.id,
         }
@@ -308,11 +308,11 @@ export const reviewsRouter = router({
           entity: 'REVIEW',
           entityId: review.id,
           field: 'approved',
-          fromValue: null,
+          fromValue: null as any,
           toValue: {
             approvedById: ctx.session.user.id,
             comment: input.comment,
-          },
+          } as any,
           state: 'MODIFIED',
           changedById: ctx.session.user.id,
         }

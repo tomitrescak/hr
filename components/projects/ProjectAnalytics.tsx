@@ -14,6 +14,8 @@ import {
   Calendar,
   AlertTriangle
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { OKRAnalytics } from './OKRAnalytics'
 
 interface Task {
   id: string
@@ -32,9 +34,18 @@ interface Task {
 interface OKR {
   id: string
   title: string
-  target: number
-  current?: number | null
+  description: string
   dueDate?: Date | null
+  keyResults?: {
+    id: string
+    title: string
+    progress: number
+  }[]
+  tasks?: {
+    id: string
+    title: string
+    state: string
+  }[]
 }
 
 interface Responsibility {
@@ -110,11 +121,21 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
       return acc
     }, {} as Record<string, { name: string; total: number; completed: number; inProgress: number }>)
     
-    // OKR progress
-    const okrProgress = project.okrs.map(okr => ({
-      ...okr,
-      progress: okr.target > 0 ? ((okr.current || 0) / okr.target) * 100 : 0
-    }))
+    // OKR progress (calculated from Key Results)
+    const okrProgress = project.okrs.map(okr => {
+      const keyResults = okr.keyResults || []
+      const progress = keyResults.length > 0 
+        ? keyResults.reduce((sum, kr) => sum + kr.progress, 0) / keyResults.length
+        : 0
+      return {
+        ...okr,
+        progress,
+        keyResultsCount: keyResults.length,
+        completedKeyResults: keyResults.filter(kr => kr.progress === 100).length,
+        tasksCount: okr.tasks?.length || 0,
+        completedTasks: okr.tasks?.filter(t => t.state === 'DONE').length || 0
+      }
+    })
     
     const avgOKRProgress = okrProgress.length > 0 
       ? okrProgress.reduce((sum, okr) => sum + okr.progress, 0) / okrProgress.length 
@@ -152,7 +173,13 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
   }, [project])
 
   return (
-    <div className="space-y-6">
+    <Tabs defaultValue="overview" className="space-y-4">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="overview">Project Overview</TabsTrigger>
+        <TabsTrigger value="okrs">OKR Analytics</TabsTrigger>
+      </TabsList>
+      
+      <TabsContent value="overview" className="space-y-6">
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -403,11 +430,13 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
           <CardContent>
             <div className="space-y-4">
               {analytics.okrProgress.map((okr) => (
-                <div key={okr.id} className="space-y-2">
+                <div key={okr.id} className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-sm">{okr.title}</h4>
-                    <div className="text-sm text-muted-foreground">
-                      {okr.current || 0} / {okr.target}
+                    <div className="text-xs text-muted-foreground space-x-2">
+                      <span>KRs: {okr.completedKeyResults}/{okr.keyResultsCount}</span>
+                      <span>•</span>
+                      <span>Tasks: {okr.completedTasks}/{okr.tasksCount}</span>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -416,12 +445,19 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
                       {okr.progress.toFixed(0)}%
                     </span>
                   </div>
-                  {okr.dueDate && (
-                    <p className="text-xs text-muted-foreground flex items-center">
-                      <Calendar className="h-3 w-3 mr-1" />
-                      Due: {new Date(okr.dueDate).toLocaleDateString()}
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center space-x-3">
+                      {okr.dueDate && (
+                        <span className="flex items-center">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Due: {new Date(okr.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                      {okr.keyResultsCount > 0 && (
+                        <span>Avg Key Result Progress: {okr.progress.toFixed(0)}%</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -470,6 +506,21 @@ export function ProjectAnalytics({ project }: ProjectAnalyticsProps) {
           </CardContent>
         </Card>
       )}
-    </div>
+      </TabsContent>
+      
+      <TabsContent value="okrs" className="space-y-6">
+        {project.okrs && project.okrs.length > 0 ? (
+          <OKRAnalytics okrs={project.okrs as any} />
+        ) : (
+          <div className="text-center py-12">
+            <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No OKRs Available</h3>
+            <p className="text-muted-foreground">
+              Create some OKRs to see detailed analytics and progress tracking.
+            </p>
+          </div>
+        )}
+      </TabsContent>
+    </Tabs>
   )
 }

@@ -52,17 +52,6 @@ const navigationItems: NavigationItem[] = [
     icon: Settings,
     requiredRole: [Role.PROJECT_MANAGER],
   },
-  {
-    href: "/planning",
-    label: "Planning",
-    icon: Calendar,
-    requiredRole: [Role.PROJECT_MANAGER],
-  },
-  {
-    href: "/reviews",
-    label: "Reviews",
-    icon: ClipboardList,
-  },
 ]
 
 export function Navigation() {

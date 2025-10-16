@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { trpc } from '@/lib/trpc/client'
@@ -36,15 +36,12 @@ export function CreateCompetencyForm({ onSuccess }: CreateCompetencyFormProps) {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
+    control,
     reset,
     formState: { errors },
   } = useForm<CompetencyFormData>({
     resolver: zodResolver(competencySchema),
   })
-
-  const watchedType = watch('type')
 
   const createMutation = trpc.competencies.create.useMutation({
     onSuccess: () => {
@@ -80,24 +77,27 @@ export function CreateCompetencyForm({ onSuccess }: CreateCompetencyFormProps) {
       {/* Type Selection */}
       <div className="space-y-2">
         <Label htmlFor="type">Competency Type</Label>
-        <Select
-          value={watchedType}
-          onValueChange={(value) => setValue('type', value as any)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select competency type" />
-          </SelectTrigger>
-          <SelectContent>
-            {competencyTypeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                <div>
-                  <div className="font-medium">{option.label}</div>
-                  <div className="text-xs text-muted-foreground">{option.description}</div>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Controller
+          name="type"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select competency type" />
+              </SelectTrigger>
+              <SelectContent>
+                {competencyTypeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-xs text-muted-foreground">{option.description}</div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
         {errors.type && (
           <p className="text-sm text-destructive">{errors.type.message}</p>
         )}

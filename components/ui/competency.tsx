@@ -8,7 +8,7 @@ interface CompetencyProps {
   name: string
   type: 'KNOWLEDGE' | 'SKILL' | 'TECH_TOOL' | 'ABILITY' | 'VALUE' | 'BEHAVIOUR' | 'ENABLER'
   description?: string
-  proficiency?: 'BEGINNER' | 'NOVICE' | 'COMPETENT' | 'PROFICIENT' | 'EXPERT'
+  proficiency?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT'
   lastUpdated?: Date
 }
 
@@ -28,11 +28,10 @@ interface CompetencyGridProps {
 }
 
 const proficiencyLevels = {
-  BEGINNER: { level: 1, color: "bg-red-100 text-red-800", label: "Beginner (1)" },
-  NOVICE: { level: 2, color: "bg-orange-100 text-orange-800", label: "Novice (2)" },
-  COMPETENT: { level: 3, color: "bg-yellow-100 text-yellow-800", label: "Competent (3)" },
-  PROFICIENT: { level: 4, color: "bg-blue-100 text-blue-800", label: "Proficient (4)" },
-  EXPERT: { level: 5, color: "bg-green-100 text-green-800", label: "Expert (5)" },
+  BEGINNER: { level: 1, color: "bg-red-100 text-red-800", label: "Beginner" },
+  INTERMEDIATE: { level: 2, color: "bg-yellow-100 text-yellow-800", label: "Intermediate" },
+  ADVANCED: { level: 3, color: "bg-blue-100 text-blue-800", label: "Advanced" },
+  EXPERT: { level: 4, color: "bg-green-100 text-green-800", label: "Expert" },
 }
 
 const typeColors = {
@@ -48,10 +47,14 @@ const typeColors = {
 function ProficiencyBadge({ proficiency }: { proficiency?: CompetencyProps['proficiency'] }) {
   if (!proficiency) return null
   
-  const config = proficiencyLevels[proficiency]
+  const config = proficiencyLevels[proficiency] || {
+    level: 0,
+    color: "bg-gray-100 text-gray-800",
+    label: "Unknown"
+  }
   return (
     <Badge variant="outline" className={config.color}>
-      {config.label}
+      {config.label} 
     </Badge>
   )
 }

@@ -17,7 +17,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         const user = await db.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: credentials.email as string },
           include: { person: true }
         })
 
@@ -26,7 +26,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         const isValidPassword = await bcrypt.compare(
-          credentials.password,
+          credentials.password as string,
           user.passwordHash
         )
 

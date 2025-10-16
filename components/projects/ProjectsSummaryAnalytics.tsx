@@ -25,8 +25,10 @@ interface Project {
   }>
   okrs: Array<{
     id: string
-    target: number
-    current?: number | null
+    keyResults: Array<{
+      id: string
+      progress: number
+    }>
   }>
   responsibilities: Array<{
     id: string
@@ -67,8 +69,12 @@ export function ProjectsSummaryAnalytics({ projects }: ProjectsSummaryAnalyticsP
     const totalOKRs = allOKRs.length
     const okrProgress = totalOKRs > 0 
       ? allOKRs.reduce((sum, okr) => {
-          const progress = okr.target > 0 ? ((okr.current || 0) / okr.target) * 100 : 0
-          return sum + progress
+          // Calculate progress as average of key results
+          const keyResults = okr.keyResults || []
+          const avgProgress = keyResults.length > 0 
+            ? keyResults.reduce((krSum, kr) => krSum + kr.progress, 0) / keyResults.length
+            : 0
+          return sum + avgProgress
         }, 0) / totalOKRs 
       : 0
     

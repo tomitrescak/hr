@@ -1,29 +1,127 @@
 "use client"
 
+import { useState, useMemo } from "react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { MainLayout } from "@/components/layout/main-layout"
+import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { trpc } from "@/lib/trpc/client"
 import Link from "next/link"
 import { Role } from "@prisma/client"
-import { Users, Plus } from "lucide-react"
+import { Users, Plus, Filter } from "lucide-react"
+import { AddPersonDialog } from "@/components/people/add-person-dialog"
+import { PersonActionsMenu } from "@/components/people/person-actions-menu"
+import { SortableTableHeader, type SortDirection } from "@/components/ui/sortable-table-header"
+import { useStatusFilter } from "@/lib/use-status-filter"
+
+type SortConfig = {
+  key: string | null
+  direction: SortDirection
+}
 
 export default function PeoplePage() {
+  const { data: session } = useSession()
   const { data: people, isLoading } = trpc.people.list.useQuery()
   const router = useRouter()
+  const [statusFilter, setStatusFilter] = useStatusFilter('people-status-filter', 'all')
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null })
+
+  const isManager = session?.user?.role === Role.PROJECT_MANAGER
+
+  const handleSort = (key: string, direction: SortDirection) => {
+    setSortConfig({ key: direction ? key : null, direction })
+  }
+
+  const sortedAndFilteredPeople = useMemo(() => {
+    if (!people) return []
+
+    // First, filter by status
+    let filtered = people.filter(person => {
+      if (statusFilter === 'active') return person.isActive
+      if (statusFilter === 'inactive') return !person.isActive
+      return true
+    })
+
+    // Then sort with special handling for status-aware sorting
+    if (sortConfig.key && sortConfig.direction) {
+      filtered = [...filtered].sort((a, b) => {
+        const { key, direction } = sortConfig
+        const multiplier = direction === 'asc' ? 1 : -1
+
+        // Special handling: when sorting by status, sort normally
+        if (key === 'status') {
+          const aValue = a.isActive ? 'active' : 'inactive'
+          const bValue = b.isActive ? 'active' : 'inactive'
+          return aValue.localeCompare(bValue) * multiplier
+        }
+
+        // For all other sorts: keep active people at top, inactive at bottom
+        if (a.isActive !== b.isActive) {
+          return a.isActive ? -1 : 1
+        }
+
+        // Both have same status, sort by the requested field
+        let aValue: any
+        let bValue: any
+
+        switch (key) {
+          case 'name':
+            aValue = a.name.toLowerCase()
+            bValue = b.name.toLowerCase()
+            break
+          case 'email':
+            aValue = a.email.toLowerCase()
+            bValue = b.email.toLowerCase()
+            break
+          case 'role':
+            aValue = a.role
+            bValue = b.role
+            break
+          case 'competencies':
+            aValue = a._count?.competencies || 0
+            bValue = b._count?.competencies || 0
+            break
+          case 'assignments':
+            aValue = a._count?.assignments || 0
+            bValue = b._count?.assignments || 0
+            break
+          case 'reviews':
+            aValue = a._count?.reviews || 0
+            bValue = b._count?.reviews || 0
+            break
+          default:
+            return 0
+        }
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return aValue.localeCompare(bValue) * multiplier
+        }
+        
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return (aValue - bValue) * multiplier
+        }
+
+        return 0
+      })
+    }
+
+    return filtered
+  }, [people, statusFilter, sortConfig])
 
   if (isLoading) {
     return (
-      <MainLayout>
+      <AppLayout>
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">People</h1>
               <p className="text-muted-foreground">Manage team member profiles and competencies</p>
             </div>
+            <AddPersonDialog />
           </div>
           
           <Card>
@@ -36,12 +134,12 @@ export default function PeoplePage() {
             </CardContent>
           </Card>
         </div>
-      </MainLayout>
+      </AppLayout>
     )
   }
 
   return (
-    <MainLayout>
+    <AppLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -51,40 +149,122 @@ export default function PeoplePage() {
             </h1>
             <p className="text-muted-foreground">Manage team member profiles and competencies</p>
           </div>
+          <AddPersonDialog />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              All People
-              <Badge variant="secondary">{people?.length || 0}</Badge>
-            </CardTitle>
-            <CardDescription>List of all users in the system</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  All People
+                  <Badge variant="secondary">{sortedAndFilteredPeople.length}</Badge>
+                  {statusFilter !== 'all' && (
+                    <Badge variant="outline" className="capitalize">
+                      {statusFilter}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>List of all users in the system</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                  <SelectTrigger className="w-32">
+                    <Filter className="h-4 w-4 mr-1" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {!people || people.length === 0 ? (
+            {!sortedAndFilteredPeople || sortedAndFilteredPeople.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No people found
+                {statusFilter === 'all' ? 'No people found' : `No ${statusFilter} people found`}
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Competencies</TableHead>
-                    <TableHead>Assignments</TableHead>
-                    <TableHead>Reviews</TableHead>
+                    <SortableTableHeader 
+                      sortKey="status" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Status
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="name" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Name
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="email" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Email
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="role" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Role
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="competencies" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Competencies
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="assignments" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Assignments
+                    </SortableTableHeader>
+                    <SortableTableHeader 
+                      sortKey="reviews" 
+                      currentSort={sortConfig} 
+                      onSort={handleSort}
+                    >
+                      Reviews
+                    </SortableTableHeader>
+                    {isManager && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {people.map((person) => (
-                    <TableRow key={person.id}>
+                  {sortedAndFilteredPeople.map((person) => (
+                    <TableRow key={person.id} className={!person.isActive ? 'opacity-60' : ''}>
                       <TableCell>
-                        <Link href={`/people/${person.id}`} className="text-primary hover:underline font-medium">
-                          {person.name}
-                        </Link>
+                        <Badge 
+                          variant={person.isActive ? "default" : "secondary"}
+                          className={person.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}
+                        >
+                          {person.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <Link href={`/people/${person.id}`} className="hover:underline font-medium">
+                            {person.name}
+                          </Link>
+                          {person.alternativeEmail && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Alt: {person.alternativeEmail}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{person.email}</TableCell>
                       <TableCell>
@@ -101,6 +281,11 @@ export default function PeoplePage() {
                       <TableCell>
                         <Badge variant="outline">{person._count?.reviews || 0}</Badge>
                       </TableCell>
+                      {isManager && (
+                        <TableCell className="text-right">
+                          <PersonActionsMenu person={person} />
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -109,6 +294,6 @@ export default function PeoplePage() {
           </CardContent>
         </Card>
       </div>
-    </MainLayout>
+    </AppLayout>
   )
 }

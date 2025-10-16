@@ -2,6 +2,7 @@
 
 import { ReactNode } from "react"
 import { Navigation } from "./navigation"
+import { Breadcrumb } from "@/components/ui/breadcrumb"
 
 interface MainLayoutProps {
   children: ReactNode
@@ -18,6 +19,12 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="container mx-auto py-6 px-4">
+          {/* Breadcrumbs */}
+          <div className="mb-6">
+            <Breadcrumb />
+          </div>
+          
+          {/* Page Content */}
           {children}
         </div>
       </main>

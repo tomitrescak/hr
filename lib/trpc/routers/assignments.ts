@@ -225,7 +225,7 @@ export const assignmentsRouter = router({
           entity: 'ASSIGNMENT',
           entityId: assignment.id,
           field: 'created',
-          fromValue: null,
+          fromValue: undefined,
           toValue: {
             personId: assignment.personId,
             type: assignment.type,
@@ -330,8 +330,8 @@ export const assignmentsRouter = router({
             entity: 'ASSIGNMENT',
             entityId: updated.id,
             field,
-            fromValue: existing[field as keyof typeof existing],
-            toValue: newValue,
+            fromValue: existing[field as keyof typeof existing] as any,
+            toValue: newValue as any,
             state: 'MODIFIED',
             changedById: ctx.session.user.id,
           }

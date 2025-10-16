@@ -27,6 +27,8 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Progress } from '@/components/ui/progress'
+import { AppLayout } from '@/components/layout/app-layout'
+import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
 
 const courseStatusColors = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -104,30 +106,34 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
   const isEnrolled = course?.enrollments.some(e => e.person.id === session?.user?.id)
   const StatusIcon = course ? courseStatusIcons[course.status] : Clock
 
+  const handleCompetencyClick = (competencyId: string) => {
+    router.push(`/competencies/${competencyId}`)
+  }
+
   if (isLoading) {
     return (
-      <div className="p-6">
+      <AppLayout>
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-gray-200 rounded w-1/4"></div>
           <div className="h-32 bg-gray-200 rounded"></div>
           <div className="h-64 bg-gray-200 rounded"></div>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   if (!course) {
     return (
-      <div className="p-6">
+      <AppLayout>
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold text-gray-900">Course not found</h2>
-          <p className="text-gray-600 mt-2">The course you're looking for doesn't exist.</p>
+          <p className="text-gray-600 mt-2">The course you&apos;re looking for doesn&apos;t exist.</p>
           <Button onClick={() => router.push('/courses')} className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Courses
           </Button>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
@@ -136,7 +142,8 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     : 0
 
   return (
-    <div className="p-6 space-y-6">
+    <AppLayout>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -362,48 +369,16 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
 
         {/* Competencies Tab */}
         <TabsContent value="competencies">
-          <Card>
-            <CardHeader>
-              <CardTitle>Associated Competencies</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {course.competencies.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {course.competencies.map((courseCompetency) => (
-                    <Card key={courseCompetency.id} className="p-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <button
-                            onClick={() => router.push(`/competencies/${courseCompetency.competency.id}`)}
-                            className="font-medium hover:underline text-left"
-                          >
-                            {courseCompetency.competency.name}
-                          </button>
-                          <Badge
-                            variant="outline"
-                            className={competencyTypeColors[courseCompetency.competency.type]}
-                          >
-                            {courseCompetency.competency.type.replace('_', ' ')}
-                          </Badge>
-                        </div>
-                        {courseCompetency.competency.description && (
-                          <p className="text-sm text-muted-foreground">
-                            {courseCompetency.competency.description}
-                          </p>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No competencies associated with this course.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CourseCompetencyManager
+            courseId={id}
+            competencies={course.competencies.map(c => ({...c, proficiency: c.proficiency || undefined})) as any}
+            canManage={canManage}
+            readOnly={true}
+            onCompetencyClick={handleCompetencyClick}
+          />
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

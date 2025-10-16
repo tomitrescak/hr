@@ -1,23 +1,23 @@
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
-import { MainLayout } from "@/components/layout/main-layout"
+"use client"
+
+import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useSession } from "next-auth/react"
+import { trpc } from "@/lib/trpc/client"
 
-export default async function Home() {
-  const session = await auth()
-
-  if (!session) {
-    redirect("/auth/signin")
-  }
+export default function Home() {
+  const { data: session } = useSession()
+  const { data: stats, isLoading } = trpc.dashboard.getStats.useQuery()
 
   return (
-    <MainLayout>
+    <AppLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-lg text-muted-foreground">
-            Welcome back, {session.user.name}!
+            Welcome back, {session?.user.name}!
           </p>
         </div>
         
@@ -26,7 +26,11 @@ export default async function Home() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 People
-                <Badge variant="secondary">0</Badge>
+                {isLoading ? (
+                  <Skeleton className="h-5 w-8" />
+                ) : (
+                  <Badge variant="secondary">{stats?.peopleCount || 0}</Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 Manage people and competencies
@@ -43,7 +47,11 @@ export default async function Home() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Projects
-                <Badge variant="secondary">0</Badge>
+                {isLoading ? (
+                  <Skeleton className="h-5 w-8" />
+                ) : (
+                  <Badge variant="secondary">{stats?.projectsCount || 0}</Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 Track projects and tasks
@@ -60,7 +68,11 @@ export default async function Home() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Reviews
-                <Badge variant="secondary">0</Badge>
+                {isLoading ? (
+                  <Skeleton className="h-5 w-8" />
+                ) : (
+                  <Badge variant="secondary">{stats?.reviewsCount || 0}</Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 Weekly assignments and reviews
@@ -74,6 +86,6 @@ export default async function Home() {
           </Card>
         </div>
       </div>
-    </MainLayout>
+    </AppLayout>
   )
 }

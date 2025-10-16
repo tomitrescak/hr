@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
@@ -23,6 +23,7 @@ const taskSchema = z.object({
   description: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
   assigneeId: z.string().optional(),
+  okrId: z.string().optional(),
   dueDate: z.string().optional(),
 })
 
@@ -39,8 +40,7 @@ export function CreateTaskForm({ projectId, onSuccess }: CreateTaskFormProps) {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
+    control,
     reset,
     formState: { errors },
   } = useForm<TaskFormData>({
@@ -50,10 +50,8 @@ export function CreateTaskForm({ projectId, onSuccess }: CreateTaskFormProps) {
     },
   })
 
-  const watchedPriority = watch('priority')
-  const watchedAssigneeId = watch('assigneeId')
-
   const { data: people } = trpc.projects.getPeople.useQuery()
+  const { data: project } = trpc.projects.getById.useQuery({ id: projectId })
 
   const createMutation = trpc.projects.createTask.useMutation({
     onSuccess: () => {
@@ -74,6 +72,7 @@ export function CreateTaskForm({ projectId, onSuccess }: CreateTaskFormProps) {
         description: data.description || undefined,
         priority: data.priority,
         assigneeId: data.assigneeId || undefined,
+        okrId: data.okrId || undefined,
         dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
       })
     } finally {
@@ -114,19 +113,22 @@ export function CreateTaskForm({ projectId, onSuccess }: CreateTaskFormProps) {
         {/* Priority */}
         <div className="space-y-2">
           <Label htmlFor="priority">Priority</Label>
-          <Select
-            value={watchedPriority}
-            onValueChange={(value) => setValue('priority', value as any)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="LOW">Low</SelectItem>
-              <SelectItem value="MEDIUM">Medium</SelectItem>
-              <SelectItem value="HIGH">High</SelectItem>
-            </SelectContent>
-          </Select>
+          <Controller
+            name="priority"
+            control={control}
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LOW">Low</SelectItem>
+                  <SelectItem value="MEDIUM">Medium</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
           {errors.priority && (
             <p className="text-sm text-destructive">{errors.priority.message}</p>
           )}
@@ -135,27 +137,65 @@ export function CreateTaskForm({ projectId, onSuccess }: CreateTaskFormProps) {
         {/* Assignee */}
         <div className="space-y-2">
           <Label htmlFor="assigneeId">Assignee</Label>
-          <Select
-            value={watchedAssigneeId}
-            onValueChange={(value) => setValue('assigneeId', value === 'unassigned' ? undefined : value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select assignee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {people?.map(person => (
-                <SelectItem key={person.id} value={person.id}>
-                  {person.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Controller
+            name="assigneeId"
+            control={control}
+            render={({ field }) => (
+              <Select 
+                value={field.value || "unassigned"} 
+                onValueChange={(value) => field.onChange(value === 'unassigned' ? undefined : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {people?.map(person => (
+                    <SelectItem key={person.id} value={person.id}>
+                      {person.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
           {errors.assigneeId && (
             <p className="text-sm text-destructive">{errors.assigneeId.message}</p>
           )}
         </div>
       </div>
+
+      {/* OKR Assignment */}
+      {project?.okrs && project.okrs.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="okrId">Assign to OKR (Optional)</Label>
+          <Controller
+            name="okrId"
+            control={control}
+            render={({ field }) => (
+              <Select 
+                value={field.value || "none"} 
+                onValueChange={(value) => field.onChange(value === 'none' ? undefined : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select OKR" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No OKR</SelectItem>
+                  {project.okrs.map(okr => (
+                    <SelectItem key={okr.id} value={okr.id}>
+                      {okr.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.okrId && (
+            <p className="text-sm text-destructive">{errors.okrId.message}</p>
+          )}
+        </div>
+      )}
 
       {/* Due Date */}
       <div className="space-y-2">
