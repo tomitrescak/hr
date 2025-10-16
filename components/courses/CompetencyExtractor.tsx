@@ -51,7 +51,7 @@ export function CompetencyExtractor({
   createCompetency, 
   allCompetencies 
 }: CompetencyExtractorProps) {
-  const [extractedCompetencies, setExtractedCompetencies] = useState<ExtractedCompetency[]>([])
+  const [extractedCompetencies, setExtractedCompetencies] = useState<(ExtractedCompetency & { id: string })[]>([])
   const [competencyStates, setCompetencyStates] = useState<Record<string, {
     proficiency: string
     action: 'pending' | 'adding' | 'added' | 'ignored'
@@ -64,10 +64,16 @@ export function CompetencyExtractor({
 
   const extractMutation = trpc.extraction.extractCompetencies.useMutation({
     onSuccess: (data) => {
-      setExtractedCompetencies(data.extractedCompetencies)
+      // Add unique IDs to each competency to prevent re-rendering issues
+      const competenciesWithIds = data.extractedCompetencies.map((comp: ExtractedCompetency, index: number) => ({
+        ...comp,
+        id: `${comp.name}-${index}-${Date.now()}`
+      }))
+      setExtractedCompetencies(competenciesWithIds)
+      
       // Initialize states for each competency
-      const initialStates = data.extractedCompetencies.reduce((acc: Record<string, { proficiency: string; action: 'pending' }>, comp: ExtractedCompetency) => {
-        acc[comp.name] = {
+      const initialStates = competenciesWithIds.reduce((acc: Record<string, { proficiency: string; action: 'pending' }>, comp: ExtractedCompetency & { id: string }) => {
+        acc[comp.id] = {
           proficiency: comp.suggestedProficiency,
           action: 'pending'
         }
@@ -76,8 +82,8 @@ export function CompetencyExtractor({
       setCompetencyStates(initialStates)
       
       // Initialize editing states
-      const initialEditingStates = data.extractedCompetencies.reduce((acc: Record<string, { isEditing: boolean }>, comp: ExtractedCompetency) => {
-        acc[comp.name] = {
+      const initialEditingStates = competenciesWithIds.reduce((acc: Record<string, { isEditing: boolean }>, comp: ExtractedCompetency & { id: string }) => {
+        acc[comp.id] = {
           isEditing: false
         }
         return acc
@@ -105,14 +111,14 @@ export function CompetencyExtractor({
     })
   }
 
-  const handleAddCompetency = async (competency: ExtractedCompetency) => {
-    const state = competencyStates[competency.name]
+  const handleAddCompetency = async (competency: ExtractedCompetency & { id: string }) => {
+    const state = competencyStates[competency.id]
     if (!state || state.action !== 'pending') return
 
     // Update state to show loading
     setCompetencyStates(prev => ({
       ...prev,
-      [competency.name]: { ...prev[competency.name], action: 'adding' }
+      [competency.id]: { ...prev[competency.id], action: 'adding' }
     }))
 
     try {
@@ -153,7 +159,7 @@ export function CompetencyExtractor({
         // Update state to show success
         setCompetencyStates(prev => ({
           ...prev,
-          [competency.name]: { ...prev[competency.name], action: 'added' }
+          [competency.id]: { ...prev[competency.id], action: 'added' }
         }))
 
         onCompetencyAdded()
@@ -165,54 +171,40 @@ export function CompetencyExtractor({
       // Reset state back to pending
       setCompetencyStates(prev => ({
         ...prev,
-        [competency.name]: { ...prev[competency.name], action: 'pending' }
+        [competency.id]: { ...prev[competency.id], action: 'pending' }
       }))
     }
   }
 
-  const handleIgnoreCompetency = (competency: ExtractedCompetency) => {
+  const handleIgnoreCompetency = (competency: ExtractedCompetency & { id: string }) => {
     setCompetencyStates(prev => ({
       ...prev,
-      [competency.name]: { ...prev[competency.name], action: 'ignored' }
+      [competency.id]: { ...prev[competency.id], action: 'ignored' }
     }))
   }
 
-  const updateProficiency = (competencyName: string, proficiency: string) => {
+  const updateProficiency = (competencyId: string, proficiency: string) => {
     setCompetencyStates(prev => ({
       ...prev,
-      [competencyName]: { ...prev[competencyName], proficiency }
+      [competencyId]: { ...prev[competencyId], proficiency }
     }))
   }
 
-  const updateCompetency = (oldName: string, field: 'name' | 'type' | 'description', value: string) => {
+  const updateCompetency = (competencyId: string, field: 'name' | 'type' | 'description', value: string) => {
     setExtractedCompetencies(prev => prev.map(comp => {
-      if (comp.name === oldName) {
-        const updated = { ...comp, [field]: value }
-        
-        // If name changed, update the states with new key
-        if (field === 'name' && value !== oldName) {
-          setCompetencyStates(prevStates => {
-            const { [oldName]: oldState, ...rest } = prevStates
-            return { ...rest, [value]: oldState }
-          })
-          setEditingStates(prevEditStates => {
-            const { [oldName]: oldEditState, ...rest } = prevEditStates
-            return { ...rest, [value]: oldEditState }
-          })
-        }
-        
-        return updated
+      if (comp.id === competencyId) {
+        return { ...comp, [field]: value }
       }
       return comp
     }))
   }
 
-  const toggleEdit = (competencyName: string) => {
+  const toggleEdit = (competencyId: string) => {
     setEditingStates(prev => ({
       ...prev,
-      [competencyName]: {
-        ...prev[competencyName],
-        isEditing: !prev[competencyName]?.isEditing
+      [competencyId]: {
+        ...prev[competencyId],
+        isEditing: !prev[competencyId]?.isEditing
       }
     }))
   }
@@ -324,19 +316,19 @@ export function CompetencyExtractor({
             <div className="grid gap-3">
               {extractedCompetencies
                 .filter((competency) => {
-                  const state = competencyStates[competency.name]
+                  const state = competencyStates[competency.id]
                   if (!state) return false
                   // Show all if showIgnored is true, otherwise hide ignored ones
                   return showIgnored || state.action !== 'ignored'
                 })
                 .map((competency) => {
-                const state = competencyStates[competency.name]
-                const editState = editingStates[competency.name]
+                const state = competencyStates[competency.id]
+                const editState = editingStates[competency.id]
                 if (!state || !editState) return null
 
                 return (
                   <div
-                    key={competency.name}
+                    key={competency.id}
                     className={`border rounded-lg p-4 ${
                       state.action === 'added' 
                         ? 'bg-green-50 border-green-200' 
@@ -352,7 +344,7 @@ export function CompetencyExtractor({
                             <div className="flex items-center gap-2 flex-1">
                               <Input
                                 value={competency.name}
-                                onChange={(e) => updateCompetency(competency.name, 'name', e.target.value)}
+                                onChange={(e) => updateCompetency(competency.id, 'name', e.target.value)}
                                 className="text-base font-medium"
                                 placeholder="Competency name"
                               />
@@ -366,7 +358,7 @@ export function CompetencyExtractor({
                           {editState.isEditing ? (
                             <Select
                               value={competency.type}
-                              onValueChange={(value) => updateCompetency(competency.name, 'type', value)}
+                              onValueChange={(value) => updateCompetency(competency.id, 'type', value)}
                             >
                               <SelectTrigger className="w-40">
                                 <SelectValue />
@@ -392,7 +384,7 @@ export function CompetencyExtractor({
                           <div className="mb-3">
                             <Textarea
                               value={competency.description}
-                              onChange={(e) => updateCompetency(competency.name, 'description', e.target.value)}
+                              onChange={(e) => updateCompetency(competency.id, 'description', e.target.value)}
                               className="text-sm"
                               rows={2}
                               placeholder="Competency description"
@@ -413,7 +405,7 @@ export function CompetencyExtractor({
                               {editState.isEditing ? (
                                 <Select
                                   value={state.proficiency}
-                                  onValueChange={(value) => updateProficiency(competency.name, value)}
+                                  onValueChange={(value) => updateProficiency(competency.id, value)}
                                 >
                                   <SelectTrigger className="w-32">
                                     <SelectValue />
@@ -458,7 +450,7 @@ export function CompetencyExtractor({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => toggleEdit(competency.name)}
+                                onClick={() => toggleEdit(competency.id)}
                               >
                                 <Check className="h-4 w-4 mr-2" />
                                 Done
@@ -467,7 +459,7 @@ export function CompetencyExtractor({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => toggleEdit(competency.name)}
+                                onClick={() => toggleEdit(competency.id)}
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 Edit
@@ -504,10 +496,10 @@ export function CompetencyExtractor({
 
             <div className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm text-gray-600">
-                {extractedCompetencies.filter(c => competencyStates[c.name]?.action === 'added').length} added,{' '}
-                {extractedCompetencies.filter(c => competencyStates[c.name]?.action === 'ignored').length} ignored,{' '}
-                {extractedCompetencies.filter(c => competencyStates[c.name]?.action === 'pending').length} pending
-                {!showIgnored && extractedCompetencies.filter(c => competencyStates[c.name]?.action === 'ignored').length > 0 && (
+                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'added').length} added,{' '}
+                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'ignored').length} ignored,{' '}
+                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'pending').length} pending
+                {!showIgnored && extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'ignored').length > 0 && (
                   <span className="ml-2 text-gray-500">(ignored hidden)</span>
                 )}
               </div>
