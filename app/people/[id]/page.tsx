@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Search } from 'lucide-react'
 import { DevelopmentPlan } from '@/components/courses/DevelopmentPlan'
 import { CompetencyExtractor } from '@/components/courses/CompetencyExtractor'
+import { Avatar } from '@/components/ui/avatar'
 import CVFileUpload from '@/components/CVFileUpload'
 import { marked } from 'marked'
 import { supportsProficiency } from '@/lib/utils/competency'
@@ -64,7 +65,8 @@ export default function PersonPage({ params }: PersonPageProps) {
     email: "", 
     role: "USER" as Role,
     entryDate: "",
-    cv: ""
+    cv: "",
+    photo: ""
   })
   
   // Reviews state
@@ -238,7 +240,8 @@ export default function PersonPage({ params }: PersonPageProps) {
       email: person.email,
       role: person.role,
       entryDate: person.entryDate ? new Date(person.entryDate).toISOString().split('T')[0] : "",
-      cv: person.cv || ""
+      cv: person.cv || "",
+      photo: ""
     })
     setEditingProfile(true)
   }
@@ -252,6 +255,7 @@ export default function PersonPage({ params }: PersonPageProps) {
         email: profileForm.email,
         entryDate: profileForm.entryDate ? new Date(profileForm.entryDate).toISOString() : undefined,
         cv: profileForm.cv,
+        photo: profileForm.photo || undefined,
         ...(session?.user?.role === 'PROJECT_MANAGER' && { role: profileForm.role })
       }
       
@@ -664,6 +668,12 @@ ${tasksMarkdown}`
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
+          <Avatar
+            personId={person.id}
+            name={person.name}
+            size={80}
+            className="ring-2 ring-background shadow-lg"
+          />
           <div className="flex-1">
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <User className="h-6 w-6" />
@@ -771,6 +781,80 @@ ${tasksMarkdown}`
                       </div>
                     </div>
                     
+                    {/* Photo Upload Section */}
+                    <div className="space-y-4">
+                      <Label>Profile Photo</Label>
+                      <div className="flex items-start gap-6">
+                        <div className="flex flex-col items-center gap-4">
+                          <Avatar
+                            personId={person.id}
+                            name={person.name}
+                            size={120}
+                            className="ring-2 ring-muted"
+                            previewPhoto={profileForm.photo}
+                          />
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground">
+                              {profileForm.photo ? 'Preview' : 'Current Photo'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 space-y-4">
+                          <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
+                            <h4 className="font-medium text-gray-900 mb-2">Upload New Photo</h4>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Choose a JPEG image under 200KB for your profile photo
+                            </p>
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  if (file.size > 200 * 1024) {
+                                    alert('Photo must be under 200KB')
+                                    return
+                                  }
+                                  if (!file.type.includes('jpeg')) {
+                                    alert('Only JPEG images are supported')
+                                    return
+                                  }
+                                  
+                                  const reader = new FileReader()
+                                  reader.onload = (event) => {
+                                    const base64String = event.target?.result as string
+                                    setProfileForm(prev => ({ ...prev, photo: base64String }))
+                                  }
+                                  reader.readAsDataURL(file)
+                                }
+                              }}
+                              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <div className="mt-2 text-xs text-gray-500">
+                              Maximum size: 200KB • Format: JPEG only
+                            </div>
+                          </div>
+                          
+                          {profileForm.photo && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 text-sm text-green-600">
+                                ✓ New photo selected and ready to save
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setProfileForm(prev => ({ ...prev, photo: "" }))}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div className="space-y-4">
                       <Label>CV / Resume</Label>
                       <div className="space-y-4">
@@ -830,10 +914,50 @@ ${tasksMarkdown}`
                   </>
 ) : (
                   <div className="space-y-6">
+                    <div className="flex items-start gap-6 mb-6 p-6 bg-muted/30 rounded-lg">
+                      <Avatar
+                        personId={person.id}
+                        name={person.name}
+                        size={120}
+                        className="ring-4 ring-background shadow-lg"
+                      />
+                      <div className="flex-1">
+                        <h3 className="text-xl font-semibold mb-2">{person.name}</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Email</Label>
+                            <div className="mt-1 text-sm text-muted-foreground">{person.email}</div>
+                          </div>
+                          <div>
+                            <Label>Role</Label>
+                            <div className="mt-1">
+                              <Badge variant={person.role === Role.PROJECT_MANAGER ? "default" : "secondary"}>
+                                {person.role === Role.PROJECT_MANAGER ? "Project Manager" : "User"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Time in Company</Label>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                              {person.entryDate ? calculateTenure(person.entryDate) : 'Not available'}
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Member Since</Label>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                              {new Date((person as any).user?.createdAt || Date.now()).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label>Name</Label>
-                        <div className="mt-1 text-sm">{person.name}</div>
+                        <Label>Entry Date</Label>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {person.entryDate ? new Date(person.entryDate).toLocaleDateString() : 'Not set'}
+                        </div>
                       </div>
                       <div>
                         <Label>Email</Label>

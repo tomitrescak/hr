@@ -304,6 +304,7 @@ export const peopleRouter = router({
             createdAt: true,
           },
         },
+        photo: true,
         competencies: {
           include: {
             competency: true,
@@ -417,6 +418,7 @@ export const peopleRouter = router({
         email: z.string().email().optional(),
         entryDate: z.string().datetime().optional(),
         cv: z.string().optional(),
+        photo: z.string().optional(), // Base64 encoded photo
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -469,6 +471,56 @@ export const peopleRouter = router({
         updates.cv = input.cv
       }
 
+      // Handle photo upload
+      let photoId = currentUser.person.photoId
+      if (input.photo !== undefined) {
+        if (input.photo) {
+          // Validate photo data (should be base64 encoded JPEG)
+          if (!input.photo.startsWith('data:image/jpeg;base64,')) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Photo must be a JPEG image in base64 format',
+            })
+          }
+
+          // Calculate size
+          const base64Data = input.photo.split(',')[1]
+          const sizeInBytes = (base64Data.length * 3) / 4
+          
+          if (sizeInBytes > 200 * 1024) { // 200KB limit
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Photo size must not exceed 200KB',
+            })
+          }
+
+          // Create or update photo in Images table
+          const photo = await ctx.db.image.upsert({
+            where: { id: photoId || 'new' },
+            create: {
+              data: input.photo,
+              mimeType: 'image/jpeg',
+              size: Math.round(sizeInBytes),
+            },
+            update: {
+              data: input.photo,
+              mimeType: 'image/jpeg',
+              size: Math.round(sizeInBytes),
+            },
+          })
+
+          photoId = photo.id
+          updates.photoId = photoId
+        } else {
+          // Remove photo
+          if (photoId) {
+            await ctx.db.image.delete({ where: { id: photoId } })
+            updates.photoId = null
+            photoId = null
+          }
+        }
+      }
+
       if (Object.keys(updates).length === 0) {
         return currentUser.person
       }
@@ -486,6 +538,7 @@ export const peopleRouter = router({
                 role: true,
               },
             },
+            photo: true,
             competencies: {
               include: {
                 competency: true,
@@ -531,6 +584,7 @@ export const peopleRouter = router({
         role: z.enum(['USER', 'PROJECT_MANAGER']).optional(),
         entryDate: z.string().datetime().optional(),
         cv: z.string().optional(),
+        photo: z.string().optional(), // Base64 encoded photo
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -586,6 +640,56 @@ export const peopleRouter = router({
         personUpdates.cv = updates.cv
       }
 
+      // Handle photo upload
+      let photoId = currentPerson.photoId
+      if (updates.photo !== undefined) {
+        if (updates.photo) {
+          // Validate photo data (should be base64 encoded JPEG)
+          if (!updates.photo.startsWith('data:image/jpeg;base64,')) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Photo must be a JPEG image in base64 format',
+            })
+          }
+
+          // Calculate size
+          const base64Data = updates.photo.split(',')[1]
+          const sizeInBytes = (base64Data.length * 3) / 4
+          
+          if (sizeInBytes > 200 * 1024) { // 200KB limit
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Photo size must not exceed 200KB',
+            })
+          }
+
+          // Create or update photo in Images table
+          const photo = await ctx.db.image.upsert({
+            where: { id: photoId || 'new' },
+            create: {
+              data: updates.photo,
+              mimeType: 'image/jpeg',
+              size: Math.round(sizeInBytes),
+            },
+            update: {
+              data: updates.photo,
+              mimeType: 'image/jpeg',
+              size: Math.round(sizeInBytes),
+            },
+          })
+
+          photoId = photo.id
+          personUpdates.photoId = photoId
+        } else {
+          // Remove photo
+          if (photoId) {
+            await ctx.db.image.delete({ where: { id: photoId } })
+            personUpdates.photoId = null
+            photoId = null
+          }
+        }
+      }
+
       if (Object.keys(personUpdates).length === 0) {
         return currentPerson
       }
@@ -603,6 +707,7 @@ export const peopleRouter = router({
                 role: true,
               },
             },
+            photo: true,
             competencies: {
               include: {
                 competency: true,

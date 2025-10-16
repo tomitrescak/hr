@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
@@ -15,7 +15,9 @@ import {
   MoreVertical,
   Edit,
   Trash2,
-  Eye
+  Eye,
+  LayoutGrid,
+  List
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,17 +33,67 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { SortableTableHeader, type SortDirection } from '@/components/ui/sortable-table-header'
+import { Avatar } from '@/components/ui/avatar'
 import { ProjectsSummaryAnalytics } from '@/components/projects/ProjectsSummaryAnalytics'
 import { AppLayout } from '@/components/layout/app-layout'
+import { useViewPreference } from '@/lib/use-view-preference'
 
 export default function ProjectsPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', description: '' })
+  const [view, setView] = useViewPreference('projects-view', 'cards')
+  const [sortConfig, setSortConfig] = useState<{ key: string | null; direction: SortDirection }>({ key: null, direction: null })
   
   const { data: projects, isLoading, refetch } = trpc.projects.list.useQuery()
   const { data: stats } = trpc.projects.getStats.useQuery()
+  
+  const sortedProjects = useMemo(() => {
+    if (!projects || !sortConfig.key || !sortConfig.direction) return projects
+    
+    return [...projects].sort((a, b) => {
+      let aVal: any = a
+      let bVal: any = b
+      
+      // Navigate to nested properties
+      const keys = sortConfig.key!.split('.')
+      for (const key of keys) {
+        aVal = aVal?.[key]
+        bVal = bVal?.[key]
+      }
+      
+      // Handle different types
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase()
+        bVal = bVal?.toLowerCase() || ''
+      } else if (aVal instanceof Date) {
+        aVal = aVal.getTime()
+        bVal = bVal?.getTime() || 0
+      } else if (typeof aVal === 'number') {
+        aVal = aVal || 0
+        bVal = bVal || 0
+      } else {
+        aVal = String(aVal || '')
+        bVal = String(bVal || '')
+      }
+      
+      if (sortConfig.direction === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0
+      }
+    })
+  }, [projects, sortConfig])
   const createProject = trpc.projects.create.useMutation({
     onSuccess: () => {
       refetch()
@@ -75,6 +127,10 @@ export default function ProjectsPage() {
       }
     }
   }
+  
+  const handleSort = (key: string, direction: SortDirection) => {
+    setSortConfig({ key, direction })
+  }
 
   const isProjectManager = session?.user.role === 'PROJECT_MANAGER'
 
@@ -103,8 +159,29 @@ export default function ProjectsPage() {
             <p className="text-muted-foreground">Manage projects and track progress</p>
           </div>
           
-          {isProjectManager && (
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <div className="flex items-center gap-4">
+            {/* View Toggle */}
+            <div className="flex items-center border rounded-md">
+              <Button
+                variant={view === 'cards' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setView('cards')}
+                className="rounded-r-none"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={view === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setView('list')}
+                className="rounded-l-none"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {isProjectManager && (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
@@ -160,7 +237,8 @@ export default function ProjectsPage() {
                 </div>
               </DialogContent>
             </Dialog>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Summary Analytics */}
@@ -188,9 +266,9 @@ export default function ProjectsPage() {
               )}
             </CardContent>
           </Card>
-        ) : (
+        ) : view === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
+            {sortedProjects?.map((project) => (
               <Card key={project.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-start justify-between">
@@ -257,15 +335,23 @@ export default function ProjectsPage() {
                     {(project as any).allocations && (project as any).allocations.length > 0 && (
                       <div>
                         <h4 className="text-sm font-medium mb-2">Active Team</h4>
-                        <div className="flex flex-wrap gap-1">
-                          {(project as any).allocations.slice(0, 3).map((allocation: any) => (
-                            <Badge key={allocation.id} variant="secondary" className="text-xs">
-                              {allocation.person?.name || 'Unassigned'}
-                            </Badge>
-                          ))}
-                          {(project as any).allocations.length > 3 && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-2">
+                            {(project as any).allocations.slice(0, 4).map((allocation: any) => (
+                              allocation.person && (
+                                <Avatar
+                                  key={allocation.id}
+                                  personId={allocation.person.id}
+                                  name={allocation.person.name}
+                                  size="sm"
+                                  className="ring-2 ring-background"
+                                />
+                              )
+                            ))}
+                          </div>
+                          {(project as any).allocations.length > 4 && (
                             <Badge variant="secondary" className="text-xs">
-                              +{(project as any).allocations.length - 3} more
+                              +{(project as any).allocations.length - 4} more
                             </Badge>
                           )}
                         </div>
@@ -298,6 +384,121 @@ export default function ProjectsPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="border rounded-lg">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTableHeader 
+                    sortKey="name" 
+                    currentSort={sortConfig} 
+                    onSort={handleSort}
+                  >
+                    Project Name
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="_count.okrs" 
+                    currentSort={sortConfig} 
+                    onSort={handleSort}
+                  >
+                    OKRs
+                  </SortableTableHeader>
+                  <SortableTableHeader 
+                    sortKey="_count.tasks" 
+                    currentSort={sortConfig} 
+                    onSort={handleSort}
+                  >
+                    Tasks
+                  </SortableTableHeader>
+                  <SortableTableHeader 
+                    sortKey="_count.allocations" 
+                    currentSort={sortConfig} 
+                    onSort={handleSort}
+                  >
+                    Team
+                  </SortableTableHeader>
+                  <SortableTableHeader 
+                    sortKey="createdAt" 
+                    currentSort={sortConfig} 
+                    onSort={handleSort}
+                  >
+                    Created
+                  </SortableTableHeader>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedProjects?.map((project) => (
+                  <TableRow key={project.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/projects/${project.id}`} className="hover:underline">
+                        {project.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{project._count?.okrs || 0}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{project._count?.tasks || 0}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <Badge variant="outline">{project._count?.allocations || 0} members</Badge>
+                        {(project as any).allocations && (project as any).allocations.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {(project as any).allocations.map((allocation: any) => (
+                              allocation.person && (
+                                <Avatar
+                                  key={allocation.id}
+                                  personId={allocation.person.id}
+                                  name={allocation.person.name}
+                                  size={64}
+                                />
+                              )
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(project.createdAt).toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {isProjectManager && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}`)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}/edit`)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Project
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteProject(project.id, project.name)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

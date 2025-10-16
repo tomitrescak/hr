@@ -184,8 +184,9 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
                 onValueChange={(value) => {
                   // Ignore empty/undefined values that might be triggered during initialization
                   if (value && value.trim() !== '') {
-                    setSelectStatus(value)
-                    setValue('status', value)
+                    const typedValue = value as 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'PLANNING'
+                    setSelectStatus(typedValue)
+                    setValue('status', typedValue)
                   }
                 }}
               >
