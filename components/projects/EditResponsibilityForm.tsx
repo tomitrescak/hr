@@ -21,7 +21,7 @@ import {
 const responsibilitySchema = z.object({
   title: z.string().min(2, 'Title must be at least 2 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  personId: z.string().optional(),
+  personId: z.string(),
   capacityAllocation: z.number().int().min(0).max(100).optional(),
 })
 
@@ -34,6 +34,10 @@ interface EditResponsibilityFormProps {
     description?: string | null
     personId?: string | null
     capacityAllocation?: number
+    person?: {
+      id: string
+      name: string
+    } | null
   }
   projectId: string
   onSuccess?: () => void
@@ -41,12 +45,7 @@ interface EditResponsibilityFormProps {
 
 export function EditResponsibilityForm({ responsibility, projectId, onSuccess }: EditResponsibilityFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedPersonCapacity, setSelectedPersonCapacity] = useState<{
-    total: number
-    available: number
-    current: number
-  } | null>(null)
-
+ 
   const {
     register,
     handleSubmit,
@@ -55,48 +54,63 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
     formState: { errors },
   } = useForm<ResponsibilityFormData>({
     resolver: zodResolver(responsibilitySchema),
+    defaultValues: {
+      title: responsibility.title,
+      description: responsibility.description || '',
+      personId: responsibility.personId || responsibility.person?.id || 'unassigned',
+      capacityAllocation: responsibility.capacityAllocation || 0,
+    },
   })
 
   const watchedPersonId = watch('personId')
   const watchedCapacityAllocation = watch('capacityAllocation')
 
-  const { data: people } = trpc.people.list.useQuery()
+  const { data: people, refetch: refetchPeople } = trpc.people.list.useQuery()
+  
+  // Refetch people data when form opens to ensure fresh capacity data
+  useEffect(() => {
+    refetchPeople()
+  }, [])
 
-  // Set initial values
+  // Set initial values when responsibility changes
   useEffect(() => {
     setValue('title', responsibility.title)
     setValue('description', responsibility.description || '')
-    setValue('personId', responsibility.personId || undefined)
+    // Handle person assignment - use 'unassigned' if no person is assigned
+    const personId = responsibility.personId || responsibility.person?.id || 'unassigned'
+    setValue('personId', personId)
     setValue('capacityAllocation', responsibility.capacityAllocation || 0)
   }, [responsibility, setValue])
 
+  let selectedPersonCapacity = {
+    total: 100,
+    available: 100,
+    current: 0,
+  }
+
   // Update capacity info when person is selected
-  useEffect(() => {
-    if (watchedPersonId && people) {
-      const selectedPerson = people.find(p => p.id === watchedPersonId)
-      if (selectedPerson) {
-        const totalCapacity = selectedPerson.capacity || 100
-        const currentAllocated = selectedPerson.totalAllocatedCapacity || 0
-        // Subtract current allocation from this responsibility
-        const currentFromThisAllocation = responsibility.capacityAllocation || 0
-        const availableCapacity = Math.max(0, totalCapacity - currentAllocated + currentFromThisAllocation)
-        
-        setSelectedPersonCapacity({
-          total: totalCapacity,
-          current: currentAllocated - currentFromThisAllocation,
-          available: availableCapacity,
-        })
-      } else {
-        setSelectedPersonCapacity(null)
-      }
-    } else {
-      setSelectedPersonCapacity(null)
-    }
-  }, [watchedPersonId, people, responsibility.capacityAllocation])
+  
+  if (watchedPersonId && watchedPersonId !== 'unassigned' && people) {
+    const selectedPerson = people.find(p => p.id === watchedPersonId)
+    if (selectedPerson) {
+      const totalCapacity = selectedPerson.capacity || 100
+      const currentAllocated = (selectedPerson.totalAllocatedCapacity || 0) + (watchedCapacityAllocation || 0)
+      // Subtract current allocation from this responsibility to get available capacity
+      const assignedPersonId = responsibility.personId || responsibility.person?.id
+      const currentFromThisAllocation = assignedPersonId === selectedPerson.id ? (responsibility.capacityAllocation || 0) : 0
+      const currentWithoutThisAllocation = Math.max(0, currentAllocated - currentFromThisAllocation)
+      const availableCapacity = Math.max(0, totalCapacity - currentWithoutThisAllocation)
+      
+      selectedPersonCapacity = ({
+        total: totalCapacity,
+        current: currentWithoutThisAllocation,
+        available: availableCapacity,
+      })
+    } 
+  }
 
   const updateMutation = trpc.projects.updateAllocation.useMutation({
     onSuccess: () => {
-      setSelectedPersonCapacity(null)
       onSuccess?.()
     },
     onError: (error) => {
@@ -108,7 +122,7 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
     setIsSubmitting(true)
     try {
       // Validate capacity allocation if person is selected
-      if (data.personId && data.capacityAllocation && selectedPersonCapacity) {
+      if (data.personId && data.personId !== 'unassigned' && data.capacityAllocation && selectedPersonCapacity) {
         if (data.capacityAllocation > selectedPersonCapacity.available) {
           alert(`Cannot allocate ${data.capacityAllocation}%. Only ${selectedPersonCapacity.available}% capacity available.`)
           return
@@ -119,7 +133,7 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
         id: responsibility.id,
         title: data.title,
         description: data.description,
-        personId: data.personId || undefined,
+        personId: data.personId === 'unassigned' ? undefined : data.personId,
         capacityAllocation: data.capacityAllocation,
       })
     } finally {
@@ -161,7 +175,7 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
         <Label htmlFor="personId">Assign to Person (Optional)</Label>
         <Select
           value={watchedPersonId}
-          onValueChange={(value) => setValue('personId', value === 'unassigned' ? undefined : value)}
+          onValueChange={(value) => setValue('personId', value)}
         >
           <SelectTrigger>
             <SelectValue placeholder="Select person to assign" />
@@ -170,14 +184,19 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
             <SelectItem value="unassigned">Unassigned</SelectItem>
             {people?.map(person => {
               const isOverCapacity = person.isOverCapacity
-              const available = Math.max(0, (person.capacity || 100) - (person.totalAllocatedCapacity || 0))
+              const currentAllocated = person.totalAllocatedCapacity || 0
+              // Subtract current allocation from this responsibility if it's the same person
+              const assignedPersonId = responsibility.personId || responsibility.person?.id
+              const currentFromThisAllocation = assignedPersonId === person.id ? (responsibility.capacityAllocation || 0) : 0
+              const currentWithoutThisAllocation = Math.max(0, currentAllocated - currentFromThisAllocation)
+              const available = Math.max(0, (person.capacity || 100) - currentWithoutThisAllocation)
               
               return (
                 <SelectItem key={person.id} value={person.id}>
                   <div className="flex items-center justify-between w-full">
                     <div>
                       <div className="font-medium">{person.name}</div>
-                      <div className="text-xs text-muted-foreground">{person.email}</div>
+                      {/* <div className="text-xs text-muted-foreground">{person.email}</div> */}
                     </div>
                     <div className="text-xs ml-2">
                       <span className={isOverCapacity ? 'text-red-600' : 'text-green-600'}>
@@ -211,12 +230,18 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
             <div className="text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Capacity:</span>
-                <span className="font-medium">{selectedPersonCapacity.total}%</span>
+                <span className="font-medium">{selectedPersonCapacity.total}% ({((selectedPersonCapacity.total / 100) * 43).toLocaleString(undefined, { maximumFractionDigits: 1 })}h)</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Currently Allocated:</span>
+                <span className="text-muted-foreground">Current Allocation:</span>
                 <span className={selectedPersonCapacity.current > selectedPersonCapacity.total ? 'text-red-600 font-medium' : 'font-medium'}>
-                  {selectedPersonCapacity.current}%
+                  {(watchedCapacityAllocation || 0)}% ({((watchedCapacityAllocation || 0) / 100 * 43).toLocaleString(undefined, { maximumFractionDigits: 1 })}h)
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Allocated:</span>
+                <span className={selectedPersonCapacity.current > selectedPersonCapacity.total ? 'text-red-600 font-medium' : 'font-medium'}>
+                  {selectedPersonCapacity.current}% ({((selectedPersonCapacity.current / 100) * 43).toLocaleString(undefined, { maximumFractionDigits: 1 })}h)
                 </span>
               </div>
               <div className="flex justify-between">
@@ -224,7 +249,7 @@ export function EditResponsibilityForm({ responsibility, projectId, onSuccess }:
                 <span className={`font-medium ${
                   selectedPersonCapacity.available <= 0 ? 'text-red-600' : 'text-green-600'
                 }`}>
-                  {selectedPersonCapacity.available}%
+                  {selectedPersonCapacity.available}% ({((selectedPersonCapacity.available / 100) * 43).toLocaleString(undefined, { maximumFractionDigits: 1 })}h)
                 </span>
               </div>
               {watchedCapacityAllocation && watchedCapacityAllocation > selectedPersonCapacity.available && (

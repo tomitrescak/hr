@@ -95,10 +95,9 @@ export function CapacityBreakdownTab() {
               <TableRow>
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Total Capacity</TableHead>
+                
                 <TableHead>Current Utilization</TableHead>
                 <TableHead>Project Assignments</TableHead>
-                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -129,9 +128,7 @@ export function CapacityBreakdownTab() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{person.capacity}%</Badge>
-                    </TableCell>
+                  
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Badge 
@@ -145,39 +142,33 @@ export function CapacityBreakdownTab() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
+
+            
+
                         {person.projectAllocations.length > 0 ? (
-                          person.projectAllocations.slice(0, 2).map((allocation) => (
-                            <Link
-                              key={allocation.id}
-                              href={`/projects/${allocation.project?.id}`}
-                              className="inline-flex items-center gap-1"
+                          person.projectAllocations.map((allocation) => (
+                            <TableCell
+                            key={allocation.id}
                             >
-                              <Badge variant="outline" className="cursor-pointer hover:bg-muted">
-                                {allocation.project?.name} ({allocation.capacityAllocation}%)
-                                <ExternalLink className="h-3 w-3 ml-1" />
-                              </Badge>
+                            <Link
+                              href={`/projects/${allocation.project?.id}`}
+                              className="flex"
+                            >
+                              <div className="items-center gap-1 flex flex-col">
+                                <div className="text-center"> {allocation.project?.name}</div> 
+                                <div className="text-s text-muted-foreground">({allocation.capacityAllocation}%)</div>
+                               </div>
                             </Link>
+                            </TableCell>
                           ))
                         ) : (
+                          <TableCell>
                           <span className="text-muted-foreground text-sm">No project allocations</span>
+                          </TableCell>
                         )}
-                        {person.projectAllocations.length > 2 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{person.projectAllocations.length - 2} more
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={person.isActive ? "default" : "secondary"}
-                        className={person.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}
-                      >
-                        {person.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
+                        
+                    
+                    
                   </TableRow>
                   
                   {/* Expanded Task View */}

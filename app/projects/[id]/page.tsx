@@ -77,7 +77,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     refetch,
   } = trpc.projects.getById.useQuery({ id })
 
-  const { data: people } = trpc.projects.getPeople.useQuery()
+  const { data: people, refetch: refetchPeople } = trpc.projects.getPeople.useQuery()
 
   const deleteProject = trpc.projects.delete.useMutation({
     onSuccess: () => {
@@ -153,6 +153,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
     setIsEditResponsibilityDialogOpen(false)
     setEditingResponsibility(null)
     refetch()
+    refetchPeople() // Refetch people data to update capacity calculations
   }
 
   const handleEditTask = (task: any) => {
@@ -743,6 +744,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
           </DialogHeader>
           {editingResponsibility && (
             <EditResponsibilityForm
+              key={editingResponsibility.id}
               responsibility={editingResponsibility}
               projectId={id}
               onSuccess={handleEditResponsibilitySuccess}

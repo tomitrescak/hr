@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { use } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowLeft, Loader2, FileText } from 'lucide-react'
@@ -40,22 +40,35 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
     handleSubmit,
     setValue,
     watch,
+    reset,
+    control,
     formState: { errors },
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      status: 'ACTIVE',
+    },
   })
+
+  
+  // Local state for select value to avoid form integration issues
+  const [selectStatus, setSelectStatus] = useState('ACTIVE')
 
   // Fetch project data
   const { data: project, isLoading } = trpc.projects.getById.useQuery({ id })
 
   // Set form values when project data loads
   useEffect(() => {
-    if (project) {
+    // Only set form values once when we have project data and we're not loading
+    if (project && !isLoading && project.id) {
       setValue('name', project.name)
       setValue('description', project.description || '')
       setValue('status', project.status || 'ACTIVE')
+      setSelectStatus(project.status || 'ACTIVE')
     }
-  }, [project, setValue])
+  }, [project, isLoading, setValue])
 
   const updateMutation = trpc.projects.update.useMutation({
     onSuccess: () => {
@@ -167,8 +180,14 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
             <div className="space-y-2">
               <Label htmlFor="status">Project Status</Label>
               <Select
-                value={watch('status')}
-                onValueChange={(value) => setValue('status', value as any)}
+                value={selectStatus}
+                onValueChange={(value) => {
+                  // Ignore empty/undefined values that might be triggered during initialization
+                  if (value && value.trim() !== '') {
+                    setSelectStatus(value)
+                    setValue('status', value)
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select project status" />

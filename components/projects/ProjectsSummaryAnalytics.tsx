@@ -30,7 +30,7 @@ interface Project {
       progress: number
     }>
   }>
-  responsibilities: Array<{
+  allocations: Array<{
     id: string
   }>
 }
@@ -79,7 +79,7 @@ export function ProjectsSummaryAnalytics({ projects }: ProjectsSummaryAnalyticsP
       : 0
     
     // Team members
-    const totalTeamMembers = projects.reduce((sum, p) => sum + p.responsibilities.length, 0)
+    const totalTeamMembers = projects.reduce((sum, p) => sum + p.allocations.length, 0)
     const avgTeamSize = totalProjects > 0 ? totalTeamMembers / totalProjects : 0
     
     return {
