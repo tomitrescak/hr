@@ -217,12 +217,11 @@ Extract 5-20 relevant competencies, focusing on:
                 FROM "competencies" c
                 INNER JOIN "competency_embeddings" ce ON c.id = ce."competencyId"
                 WHERE 
-                  c."isDraft" = false AND
                   c.id != $2 AND
                   ce.embeddings IS NOT NULL AND
-                  1 - (ce.embeddings <=> $1::vector) >= 0.75
+                  1 - (ce.embeddings <=> $1::vector) >= 0.55
                 ORDER BY similarity DESC
-                LIMIT 10
+                LIMIT 5
               `, vectorString, competency.id) as Array<{
               id: string
               name: string

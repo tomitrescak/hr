@@ -206,12 +206,20 @@ export default function CoursesPage() {
                   <TableRow key={course.id}>
                     <TableCell>
                       <div>
-                        <button
-                          onClick={() => router.push(`/courses/${course.id}`)}
-                          className="font-medium hover:underline text-left"
-                        >
-                          {course.name}
-                        </button>
+                        <div className="flex items-center gap-2 mb-1">
+                          <button
+                            onClick={() => router.push(`/courses/${course.id}`)}
+                            className="font-medium hover:underline text-left"
+                          >
+                            {course.name}
+                          </button>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${course.type === 'SPECIALISATION' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}
+                          >
+                            {course.type === 'SPECIALISATION' ? 'Specialisation' : 'Course'}
+                          </Badge>
+                        </div>
                         {course.description && (
                           <p className="text-sm text-muted-foreground mt-1 max-w-xs truncate">
                             {processCourseDescription(course.description, 150)}

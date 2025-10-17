@@ -462,9 +462,27 @@ export function CompetencyExtractor({
                               </SelectContent>
                             </Select>
                           ) : (
-                            <Badge className={getCompetencyTypeColor(competency.type)}>
-                              {competency.type.replace('_', ' ')}
-                            </Badge>
+                            <>
+                              <Badge className={getCompetencyTypeColor(competency.type)}>
+                                {competency.type.replace('_', ' ')}
+                              </Badge>
+                              {/* Draft/Published Status Badge */}
+                              {(() => {
+                                const fullCompetency = allCompetencies?.find(c => c.id === competency.id)
+                                return fullCompetency ? (
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      fullCompetency.isDraft 
+                                        ? 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+                                        : 'bg-green-100 text-green-800 border-green-300'
+                                    }`}
+                                  >
+                                    {fullCompetency.isDraft ? 'Draft' : 'Published'}
+                                  </Badge>
+                                ) : null
+                              })()}
+                            </>
                           )}
                         </div>
                         
@@ -548,6 +566,22 @@ export function CompetencyExtractor({
                                         <Badge className={getCompetencyTypeColor(similar.type)} variant="outline">
                                           {similar.type.replace('_', ' ')}
                                         </Badge>
+                                        {/* Draft/Published Status Badge for Similar Competency */}
+                                        {(() => {
+                                          const fullSimilarCompetency = allCompetencies?.find(c => c.id === similar.id)
+                                          return fullSimilarCompetency ? (
+                                            <Badge 
+                                              variant="outline" 
+                                              className={`text-xs ${
+                                                fullSimilarCompetency.isDraft 
+                                                  ? 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+                                                  : 'bg-green-100 text-green-800 border-green-300'
+                                              }`}
+                                            >
+                                              {fullSimilarCompetency.isDraft ? 'Draft' : 'Published'}
+                                            </Badge>
+                                          ) : null
+                                        })()}
                                         <span className="text-xs text-gray-500">
                                           {Math.round(similar.similarity * 100)}% match
                                         </span>
@@ -623,7 +657,7 @@ export function CompetencyExtractor({
                                 Edit
                               </Button>
                             )}
-                            <Button
+                            {!editState.isEditing && <Button
                               size="sm"
                               onClick={() => handleAddCompetency(competency)}
                               disabled={state.action === 'adding'}
@@ -634,7 +668,7 @@ export function CompetencyExtractor({
                               ) : (
                                 'Add'
                               )}
-                            </Button>
+                            </Button>}
                             <Button
                               size="sm"
                               variant="outline"

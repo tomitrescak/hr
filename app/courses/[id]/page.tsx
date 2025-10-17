@@ -17,7 +17,8 @@ import {
   GraduationCap,
   Target,
   UserPlus,
-  ExternalLink
+  ExternalLink,
+  TrendingUp
 } from 'lucide-react'
 import { trpc } from '@/lib/trpc/client'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress'
 import { AppLayout } from '@/components/layout/app-layout'
 import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
+import { SpecializationCompetencySummary } from '@/components/courses/SpecializationCompetencySummary'
 import { marked } from 'marked'
 
 
@@ -57,6 +59,18 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     isLoading,
     refetch,
   } = trpc.courses.getById.useQuery({ id })
+
+  // Fetch specialization competencies if this is a specialization
+  const {
+    data: specializationCompetencies,
+    isLoading: isLoadingSpecializationCompetencies,
+  } = trpc.courses.getSpecializationCompetencies.useQuery(
+    { specializationId: id },
+    { 
+      enabled: course?.type === 'SPECIALISATION' && !!course,
+      refetchOnWindowFocus: false,
+    }
+  )
 
   const deleteMutation = trpc.courses.delete.useMutation({
     onSuccess: () => {
@@ -223,8 +237,23 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Competencies</p>
-                  <p className="text-2xl font-bold">{course._count.competencies}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {course.type === 'SPECIALISATION' ? 'Total Competencies' : 'Competencies'}
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {course.type === 'SPECIALISATION'
+                      ? (isLoadingSpecializationCompetencies
+                          ? '...' 
+                          : specializationCompetencies?.totalUniqueCompetencies ?? course._count.competencies
+                        )
+                      : course._count.competencies
+                    }
+                  </p>
+                  {course.type === 'SPECIALISATION' && specializationCompetencies && (
+                    <p className="text-xs text-muted-foreground">
+                      across {specializationCompetencies.totalCourses} courses
+                    </p>
+                  )}
                 </div>
                 <Target className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -299,9 +328,15 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                 Courses ({course.specialisationCourses?.length || 0})
               </TabsTrigger>
             )}
+            {course.type === 'SPECIALISATION' && specializationCompetencies && (
+              <TabsTrigger value="specialization-competencies" className="flex items-center">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                All Competencies ({specializationCompetencies.totalUniqueCompetencies})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="competencies" className="flex items-center">
               <Target className="h-4 w-4 mr-2" />
-              Competencies ({course.competencies.length})
+              {course.type === 'SPECIALISATION' ? 'Direct Competencies' : 'Competencies'} ({course.competencies.length})
             </TabsTrigger>
           </TabsList>
 
@@ -444,6 +479,16 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {/* Specialization Competencies Summary Tab */}
+          {course.type === 'SPECIALISATION' && specializationCompetencies && (
+            <TabsContent value="specialization-competencies">
+              <SpecializationCompetencySummary
+                specializationData={specializationCompetencies}
+                onCompetencyClick={handleCompetencyClick}
+              />
             </TabsContent>
           )}
 

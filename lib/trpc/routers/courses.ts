@@ -1205,6 +1205,129 @@ export const coursesRouter = router({
       return { success: true }
     }),
 
+  // Get unique competencies across all courses in a specialization
+  getSpecializationCompetencies: protectedProcedure
+    .input(z.object({ specializationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // First verify the specialization exists and is of type SPECIALISATION
+      const specialization = await ctx.db.course.findUnique({
+        where: { id: input.specializationId },
+        select: { type: true, name: true },
+      })
+
+      if (!specialization) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Specialization not found',
+        })
+      }
+
+      if (specialization.type !== 'SPECIALISATION') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Course is not a specialization',
+        })
+      }
+
+      // Get all courses in the specialization with their competencies
+      const specializationCourses = await ctx.db.specialisationCourse.findMany({
+        where: { specialisationId: input.specializationId },
+        include: {
+          course: {
+            include: {
+              competencies: {
+                include: {
+                  competency: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      description: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { order: 'asc' },
+      })
+
+      // Aggregate unique competencies
+      const competencyMap = new Map<string, any>()
+
+      specializationCourses.forEach((specCourse) => {
+        specCourse.course.competencies.forEach((courseComp: any) => {
+          const competency = courseComp.competency
+          const key = competency.id
+
+          if (!competencyMap.has(key)) {
+            competencyMap.set(key, {
+              ...competency,
+              proficiencies: [],
+              courseNames: [],
+              occurrenceCount: 0,
+            })
+          }
+
+          const existing = competencyMap.get(key)
+          if (existing) {
+            existing.occurrenceCount += 1
+            existing.courseNames.push(specCourse.course.name)
+            
+            if (courseComp.proficiency) {
+              existing.proficiencies.push(courseComp.proficiency)
+            }
+          }
+        })
+      })
+
+      // Convert map to array and determine highest proficiency for each competency
+      const uniqueCompetencies = Array.from(competencyMap.values()).map((comp) => {
+        let highestProficiency = null
+        if (comp.proficiencies.length > 0) {
+          const proficiencyLevels = { 'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4 }
+          const maxLevel = Math.max(...comp.proficiencies.map((p: string) => proficiencyLevels[p as keyof typeof proficiencyLevels] || 0))
+          highestProficiency = Object.keys(proficiencyLevels).find(
+            key => proficiencyLevels[key as keyof typeof proficiencyLevels] === maxLevel
+          )
+        }
+
+        return {
+          id: comp.id,
+          name: comp.name,
+          type: comp.type,
+          description: comp.description,
+          highestProficiency,
+          occurrenceCount: comp.occurrenceCount,
+          courseNames: Array.from(new Set(comp.courseNames)), // Remove duplicates
+          proficiencies: comp.proficiencies,
+        }
+      })
+
+      // Group by competency type
+      const groupedCompetencies = uniqueCompetencies.reduce((acc, comp) => {
+        if (!acc[comp.type]) {
+          acc[comp.type] = []
+        }
+        acc[comp.type].push(comp)
+        return acc
+      }, {} as Record<string, typeof uniqueCompetencies>)
+
+      // Sort each group by name
+      Object.keys(groupedCompetencies).forEach(type => {
+        groupedCompetencies[type].sort((a, b) => a.name.localeCompare(b.name))
+      })
+
+      return {
+        specializationName: specialization.name,
+        totalCourses: specializationCourses.length,
+        totalUniqueCompetencies: uniqueCompetencies.length,
+        competenciesByType: groupedCompetencies,
+        allCompetencies: uniqueCompetencies.sort((a, b) => a.name.localeCompare(b.name)),
+      }
+    }),
+
   // Search courses by competencies
   searchByCompetencies: protectedProcedure
     .input(
