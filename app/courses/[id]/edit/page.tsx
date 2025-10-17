@@ -369,15 +369,11 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="description">Description</Label>
-                  <span className={`text-xs ${
-                    descriptionLength > 150 ? 'text-destructive' : 'text-muted-foreground'
-                  }`}>
-                    {descriptionLength}/150 characters
-                  </span>
+                  
                 </div>
                 <Textarea
                   id="description"
-                  placeholder="Enter course description (max 150 characters when processed)"
+                  placeholder="Enter course description"
                   rows={3}
                   {...register('description', {
                     onChange: (e) => {

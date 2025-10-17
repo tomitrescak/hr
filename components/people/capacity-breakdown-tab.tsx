@@ -90,7 +90,7 @@ export function CapacityBreakdownTab() {
             {statusFilter === 'all' ? 'No people found' : `No ${statusFilter} people found`}
           </div>
         ) : (
-          <Table>
+          <Table> 
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12"></TableHead>

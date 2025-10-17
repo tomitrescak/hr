@@ -11,7 +11,7 @@ The competency embedding feature uses OpenAI's embedding API to create semantic 
 - **CompetencyEmbedding**: New table storing vector embeddings for each competency
   - `id`: Primary key
   - `competencyId`: Foreign key to the competency
-  - `embedding`: Float array containing the vector representation
+  - `embeddings`: Vector array containing the vector representation
   - `createdAt`, `updatedAt`: Timestamps
 
 ### Services

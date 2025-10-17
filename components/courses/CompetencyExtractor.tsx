@@ -21,6 +21,8 @@ interface ExtractedCompetency {
   type: 'KNOWLEDGE' | 'SKILL' | 'TECH_TOOL' | 'ABILITY' | 'VALUE' | 'BEHAVIOUR' | 'ENABLER'
   description: string
   suggestedProficiency: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT'
+  id: string
+  similar: SimilarCompetency[]
 }
 
 interface SimilarCompetency {
@@ -29,7 +31,6 @@ interface SimilarCompetency {
   type: string
   description?: string
   similarity: number
-  embedding?: number[]
 }
 
 interface CompetencyExtractorProps {
@@ -62,7 +63,7 @@ export function CompetencyExtractor({
   allCompetencies,
   existingCompetencies = []
 }: CompetencyExtractorProps) {
-  const [extractedCompetencies, setExtractedCompetencies] = useState<(ExtractedCompetency & { id: string })[]>([])
+  const [extractedCompetencies, setExtractedCompetencies] = useState<(ExtractedCompetency & { reactId: string })[]>([])
   const [competencyStates, setCompetencyStates] = useState<Record<string, {
     proficiency: string
     action: 'pending' | 'adding' | 'added' | 'ignored'
@@ -75,7 +76,7 @@ export function CompetencyExtractor({
   const [isExtracting, setIsExtracting] = useState(false)
   const [showIgnored, setShowIgnored] = useState(false)
 
-  const findSimilarMutation = trpc.competencies.findSimilar.useMutation()
+  const markAsUsedMutation = trpc.competencies.markAsUsed.useMutation()
 
   // Helper function to check if a competency is already added to this entity
   const isCompetencyAlreadyAdded = (competencyId: string): boolean => {
@@ -84,16 +85,17 @@ export function CompetencyExtractor({
 
   const extractMutation = trpc.extraction.extractCompetencies.useMutation({
     onSuccess: async (data) => {
-      // Add unique IDs to each competency to prevent re-rendering issues
+      // Use competencies with their database IDs and similar data
       const competenciesWithIds = data.extractedCompetencies.map((comp: ExtractedCompetency, index: number) => ({
         ...comp,
-        id: `${comp.name}-${index}-${Date.now()}`
+        // Use a unique key for React rendering (different from database ID)
+        reactId: `${comp.id}-${index}-${Date.now()}`
       }))
       setExtractedCompetencies(competenciesWithIds)
       
-      // Initialize states for each competency
-      const initialStates = competenciesWithIds.reduce((acc: Record<string, { proficiency: string; action: 'pending' }>, comp: ExtractedCompetency & { id: string }) => {
-        acc[comp.id] = {
+      // Initialize states for each competency using reactId for React state management
+      const initialStates = competenciesWithIds.reduce((acc: Record<string, { proficiency: string; action: 'pending' }>, comp) => {
+        acc[comp.reactId] = {
           proficiency: comp.suggestedProficiency,
           action: 'pending'
         }
@@ -102,24 +104,18 @@ export function CompetencyExtractor({
       setCompetencyStates(initialStates)
       
       // Initialize editing states
-      const initialEditingStates = competenciesWithIds.reduce((acc: Record<string, { isEditing: boolean }>, comp: ExtractedCompetency & { id: string }) => {
-        acc[comp.id] = {
+      const initialEditingStates = competenciesWithIds.reduce((acc: Record<string, { isEditing: boolean }>, comp) => {
+        acc[comp.reactId] = {
           isEditing: false
         }
         return acc
       }, {} as Record<string, { isEditing: boolean }>)
       setEditingStates(initialEditingStates)
       
-      // Find similar competencies for each extracted competency
+      // Set similar competencies from extraction results
       const similarResults: Record<string, SimilarCompetency[]> = {}
       for (const comp of competenciesWithIds) {
-        try {
-          const similar = await findSimilarMutation.mutateAsync({ name: comp.name })
-          similarResults[comp.id] = similar
-        } catch (error) {
-          console.error(`Failed to find similar competencies for ${comp.name}:`, error)
-          similarResults[comp.id] = []
-        }
+        similarResults[comp.reactId] = comp.similar
       }
       setSimilarCompetencies(similarResults)
       
@@ -147,76 +143,53 @@ export function CompetencyExtractor({
     })
   }
 
-  const handleAddCompetency = async (competency: ExtractedCompetency & { id: string }) => {
-    const state = competencyStates[competency.id]
+  const handleAddCompetency = async (competency: ExtractedCompetency & { reactId: string }) => {
+    const state = competencyStates[competency.reactId]
     if (!state || state.action !== 'pending') return
 
     // Update state to show loading
     setCompetencyStates(prev => ({
       ...prev,
-      [competency.id]: { ...prev[competency.id], action: 'adding' }
+      [competency.reactId]: { ...prev[competency.reactId], action: 'adding' }
     }))
 
     try {
-      let competencyId: string | null = null
-      
       // Check if a similar competency was already processed
-      const processedSimilarId = processedSimilarCompetencies[competency.id]
+      const processedSimilarId = processedSimilarCompetencies[competency.reactId]
       if (processedSimilarId) {
         // If already processed, just mark as added without doing anything
         setCompetencyStates(prev => ({
           ...prev,
-          [competency.id]: { ...prev[competency.id], action: 'added' }
+          [competency.reactId]: { ...prev[competency.reactId], action: 'added' }
         }))
         return
       }
       
-      // First, check if competency already exists in the list
-        if (allCompetencies) {
-          const existingCompetency = allCompetencies.find(
-            c => c.name.toLowerCase() === competency.name.toLowerCase() && c.type === competency.type
-          )
-          
-          if (existingCompetency) {
-            competencyId = existingCompetency.id
-          }
+      // Competency already has database ID from extraction, check if it's draft
+      const fullCompetency = allCompetencies?.find(c => c.id === competency.id)
+      if (fullCompetency?.isDraft) {
+        // Mark draft competency as used (non-draft)
+        try {
+          await markAsUsedMutation.mutateAsync({
+            id: competency.id,
+            name: competency.name,
+          })
+        } catch (markError) {
+          console.error('Failed to mark competency as used:', markError)
+          // Continue anyway - the competency exists
         }
-        
-        // If not found, create it
-        if (!competencyId) {
-          try {
-            // Check if there's a similar competency with high similarity for embedding reuse
-            const similarComps = similarCompetencies[competency.id] || []
-            const highSimilarity = similarComps.find(sim => sim.similarity > 0.95 && sim.embedding)
-            
-            const newCompetency = await createCompetency.mutateAsync({
-              name: competency.name,
-              type: competency.type,
-              description: competency.description,
-              // Reuse embedding if we have a very similar competency (>95% match)
-              embedding: highSimilarity?.embedding,
-            })
-            competencyId = newCompetency.id
-          } catch (createError: any) {
-            if (createError.message?.includes('already exists')) {
-              throw new Error(`Competency "${competency.name}" already exists but couldn't be found. Please refresh and try again.`)
-            }
-            throw createError
-          }
-        }
-
-      if (competencyId) {
-        // Add competency to entity with selected proficiency using callback
-        await onAddCompetency(competencyId, state.proficiency)
-
-        // Update state to show success
-        setCompetencyStates(prev => ({
-          ...prev,
-          [competency.id]: { ...prev[competency.id], action: 'added' }
-        }))
-
-        onCompetencyAdded()
       }
+
+      // Add competency to entity with selected proficiency using callback
+      await onAddCompetency(competency.id, state.proficiency)
+
+      // Update state to show success
+      setCompetencyStates(prev => ({
+        ...prev,
+        [competency.reactId]: { ...prev[competency.reactId], action: 'added' }
+      }))
+
+      onCompetencyAdded()
     } catch (error: any) {
       console.error('Failed to add competency:', error)
       alert(error.message || 'Failed to add competency')
@@ -224,15 +197,15 @@ export function CompetencyExtractor({
       // Reset state back to pending
       setCompetencyStates(prev => ({
         ...prev,
-        [competency.id]: { ...prev[competency.id], action: 'pending' }
+        [competency.reactId]: { ...prev[competency.reactId], action: 'pending' }
       }))
     }
   }
 
-  const handleIgnoreCompetency = (competency: ExtractedCompetency & { id: string }) => {
+  const handleIgnoreCompetency = (competency: ExtractedCompetency & { reactId: string }) => {
     setCompetencyStates(prev => ({
       ...prev,
-      [competency.id]: { ...prev[competency.id], action: 'ignored' }
+      [competency.reactId]: { ...prev[competency.reactId], action: 'ignored' }
     }))
   }
 
@@ -243,49 +216,67 @@ export function CompetencyExtractor({
     }))
   }
 
-  const updateCompetency = (competencyId: string, field: 'name' | 'type' | 'description', value: string) => {
+  const updateCompetency = (reactId: string, field: 'name' | 'type' | 'description', value: string) => {
     setExtractedCompetencies(prev => prev.map(comp => {
-      if (comp.id === competencyId) {
+      if (comp.reactId === reactId) {
         return { ...comp, [field]: value }
       }
       return comp
     }))
   }
 
-  const toggleEdit = (competencyId: string) => {
+  const toggleEdit = (reactId: string) => {
     setEditingStates(prev => ({
       ...prev,
-      [competencyId]: {
-        ...prev[competencyId],
-        isEditing: !prev[competencyId]?.isEditing
+      [reactId]: {
+        ...prev[reactId],
+        isEditing: !prev[reactId]?.isEditing
       }
     }))
   }
 
-  const handleAddSimilarCompetency = async (competencyId: string, similarCompetencyId: string) => {
-    const state = competencyStates[competencyId]
+  const handleAddSimilarCompetency = async (reactId: string, similarCompetencyId: string) => {
+    const state = competencyStates[reactId]
     if (!state || state.action !== 'pending') return
 
     // Update state to show loading
     setCompetencyStates(prev => ({
       ...prev,
-      [competencyId]: { ...prev[competencyId], action: 'adding' }
+      [reactId]: { ...prev[reactId], action: 'adding' }
     }))
 
     try {
+      // First check if the similar competency is draft and mark as used
+      const similarCompetency = similarCompetencies[reactId]?.find(s => s.id === similarCompetencyId)
+      if (similarCompetency) {
+        // Check if it's a draft in allCompetencies
+        const fullCompetency = allCompetencies?.find(c => c.id === similarCompetencyId)
+        if (fullCompetency?.isDraft) {
+          try {
+            await markAsUsedMutation.mutateAsync({
+              id: similarCompetencyId,
+              name: similarCompetency.name,
+            })
+          } catch (markError) {
+            console.error('Failed to mark similar competency as used:', markError)
+            // Continue anyway
+          }
+        }
+      }
+      
       // Add the similar competency to entity with selected proficiency
       await onAddCompetency(similarCompetencyId, state.proficiency)
 
       // Mark this similar competency as processed
       setProcessedSimilarCompetencies(prev => ({
         ...prev,
-        [competencyId]: similarCompetencyId
+        [reactId]: similarCompetencyId
       }))
 
       // Update state to show success
       setCompetencyStates(prev => ({
         ...prev,
-        [competencyId]: { ...prev[competencyId], action: 'added' }
+        [reactId]: { ...prev[reactId], action: 'added' }
       }))
 
       onCompetencyAdded()
@@ -296,7 +287,7 @@ export function CompetencyExtractor({
       // Reset state back to pending
       setCompetencyStates(prev => ({
         ...prev,
-        [competencyId]: { ...prev[competencyId], action: 'pending' }
+        [reactId]: { ...prev[reactId], action: 'pending' }
       }))
     }
   }
@@ -413,19 +404,19 @@ export function CompetencyExtractor({
             <div className="grid gap-3">
               {extractedCompetencies
                 .filter((competency) => {
-                  const state = competencyStates[competency.id]
+                  const state = competencyStates[competency.reactId]
                   if (!state) return false
                   // Show all if showIgnored is true, otherwise hide ignored ones
                   return showIgnored || state.action !== 'ignored'
                 })
                 .map((competency) => {
-                const state = competencyStates[competency.id]
-                const editState = editingStates[competency.id]
+                const state = competencyStates[competency.reactId]
+                const editState = editingStates[competency.reactId]
                 if (!state || !editState) return null
 
                 return (
                   <div
-                    key={competency.id}
+                    key={competency.reactId}
                     className={`border rounded-lg p-4 ${
                       state.action === 'added' 
                         ? 'bg-green-50 border-green-200' 
@@ -441,7 +432,7 @@ export function CompetencyExtractor({
                             <div className="flex items-center gap-2 flex-1">
                               <Input
                                 value={competency.name}
-                                onChange={(e) => updateCompetency(competency.id, 'name', e.target.value)}
+                                onChange={(e) => updateCompetency(competency.reactId, 'name', e.target.value)}
                                 className="text-base font-medium"
                                 placeholder="Competency name"
                               />
@@ -455,7 +446,7 @@ export function CompetencyExtractor({
                           {editState.isEditing ? (
                             <Select
                               value={competency.type}
-                              onValueChange={(value) => updateCompetency(competency.id, 'type', value)}
+                              onValueChange={(value) => updateCompetency(competency.reactId, 'type', value)}
                             >
                               <SelectTrigger className="w-40">
                                 <SelectValue />
@@ -481,7 +472,7 @@ export function CompetencyExtractor({
                           <div className="mb-3">
                             <Textarea
                               value={competency.description}
-                              onChange={(e) => updateCompetency(competency.id, 'description', e.target.value)}
+                              onChange={(e) => updateCompetency(competency.reactId, 'description', e.target.value)}
                               className="text-sm"
                               rows={2}
                               placeholder="Competency description"
@@ -502,7 +493,7 @@ export function CompetencyExtractor({
                               {editState.isEditing ? (
                                 <Select
                                   value={state.proficiency}
-                                  onValueChange={(value) => updateProficiency(competency.id, value)}
+                                  onValueChange={(value) => updateProficiency(competency.reactId, value)}
                                 >
                                   <SelectTrigger className="w-32">
                                     <SelectValue />
@@ -525,18 +516,18 @@ export function CompetencyExtractor({
 
                         {/* Similar Competencies Section */}
                         {(state.action === 'pending' || state.action === 'adding') && 
-                         similarCompetencies[competency.id] && 
-                         similarCompetencies[competency.id].length > 0 && 
-                         !processedSimilarCompetencies[competency.id] && (
+                         similarCompetencies[competency.reactId] && 
+                         similarCompetencies[competency.reactId].length > 0 && 
+                         !processedSimilarCompetencies[competency.reactId] && (
                           <div className="mb-4">
                             <div className="flex items-center gap-2 mb-3">
                               <AlertCircle className="h-4 w-4 text-blue-600" />
                               <span className="text-sm font-medium text-gray-800">
-                                Similar competencies found ({similarCompetencies[competency.id].length})
+                                Similar competencies found ({similarCompetencies[competency.reactId].length})
                               </span>
                             </div>
                             <div className="space-y-2">
-                              {similarCompetencies[competency.id].map((similar) => {
+                              {similarCompetencies[competency.reactId].map((similar) => {
                                 const isAlreadyAdded = isCompetencyAlreadyAdded(similar.id)
                                 return (
                                   <div 
@@ -575,7 +566,7 @@ export function CompetencyExtractor({
                                     {!isAlreadyAdded && (
                                       <Button
                                         size="sm"
-                                        onClick={() => handleAddSimilarCompetency(competency.id, similar.id)}
+                                        onClick={() => handleAddSimilarCompetency(competency.reactId, similar.id)}
                                         disabled={state.action === 'adding'}
                                         className="bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0"
                                       >
@@ -593,8 +584,8 @@ export function CompetencyExtractor({
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
                             <span className="text-sm text-green-700">
-                              {processedSimilarCompetencies[competency.id] ? (
-                                <>Added &quot;{similarCompetencies[competency.id]?.find(s => s.id === processedSimilarCompetencies[competency.id])?.name || 'competency'}&quot; with {state.proficiency} proficiency</>
+                              {processedSimilarCompetencies[competency.reactId] ? (
+                                <>Added &quot;{similarCompetencies[competency.reactId]?.find(s => s.id === processedSimilarCompetencies[competency.reactId])?.name || 'competency'}&quot; with {state.proficiency} proficiency</>
                               ) : (
                                 <>Added with {state.proficiency} proficiency</>
                               )}
@@ -617,7 +608,7 @@ export function CompetencyExtractor({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => toggleEdit(competency.id)}
+                                onClick={() => toggleEdit(competency.reactId)}
                               >
                                 <Check className="h-4 w-4 mr-2" />
                                 Done
@@ -626,7 +617,7 @@ export function CompetencyExtractor({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => toggleEdit(competency.id)}
+                                onClick={() => toggleEdit(competency.reactId)}
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 Edit
@@ -663,10 +654,10 @@ export function CompetencyExtractor({
 
             <div className="flex items-center justify-between pt-4 border-t">
               <div className="text-sm text-gray-600">
-                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'added').length} added,{' '}
-                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'ignored').length} ignored,{' '}
-                {extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'pending').length} pending
-                {!showIgnored && extractedCompetencies.filter(c => competencyStates[c.id]?.action === 'ignored').length > 0 && (
+                {extractedCompetencies.filter(c => competencyStates[c.reactId]?.action === 'added').length} added,{' '}
+                {extractedCompetencies.filter(c => competencyStates[c.reactId]?.action === 'ignored').length} ignored,{' '}
+                {extractedCompetencies.filter(c => competencyStates[c.reactId]?.action === 'pending').length} pending
+                {!showIgnored && extractedCompetencies.filter(c => competencyStates[c.reactId]?.action === 'ignored').length > 0 && (
                   <span className="ml-2 text-gray-500">(ignored hidden)</span>
                 )}
               </div>

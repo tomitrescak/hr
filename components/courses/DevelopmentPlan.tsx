@@ -119,9 +119,9 @@ export function DevelopmentPlan({ personId, canManage = false }: DevelopmentPlan
           if (status === 'WISHLIST') {
             newPlan.wishlist.push(updatedEnrollment)
           } else if (status === 'IN_PROGRESS') {
-            newPlan.inProgress.push({ ...updatedEnrollment, startedAt: new Date() })
+            newPlan.inProgress.push({ ...updatedEnrollment, startedAt: new Date().toISOString() as any })
           } else if (status === 'COMPLETED') {
-            newPlan.completed.push({ ...updatedEnrollment, completedAt: new Date(), completed: true, progress: 100 })
+            newPlan.completed.push({ ...updatedEnrollment, completedAt: new Date().toISOString() as any, completed: true, progress: 100 })
           }
           
           utils.courses.getDevelopmentPlan.setData({ personId: targetPersonId }, newPlan)

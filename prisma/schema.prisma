@@ -50,6 +50,7 @@ model Competency {
   type               CompetencyType
   name               String
   description        String?
+  isDraft            Boolean              @default(false)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   embeddings         CompetencyEmbedding?
@@ -62,7 +63,6 @@ model Competency {
 model CompetencyEmbedding {
   id           String                 @id @default(uuid())
   competencyId String                 @unique
-  embedding    Float[]
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   embeddings   Unsupported("vector")?

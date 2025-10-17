@@ -715,7 +715,7 @@ ${tasksMarkdown}`
     return parts.length > 0 ? parts.join(', ') : 'Less than a day'
   }
 
-  const handleAddCompetency = (competencyId: string, proficiency?: string) => {
+  const handleAddCompetency = async (competencyId: string, proficiency?: string) => {
     if (!person) return
     
     // Close dialog immediately for optimistic UX

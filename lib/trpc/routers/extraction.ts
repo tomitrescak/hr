@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
 import OpenAI from 'openai'
+import { generateEmbedding } from '@/lib/services/embedding'
+import { randomUUID } from 'crypto'
 
 export const extractionRouter = router({
   // Generic competency extraction endpoint
@@ -123,8 +125,145 @@ Extract 5-20 relevant competencies, focusing on:
           })
         }
 
+        console.log("🧠 Extracted Competencies")
+        console.log(responseData.competencies)
+
+        // Process each competency: check if exists, create if needed, find similar
+        const processedCompetencies = []
+
+        for (const extractedComp of responseData.competencies) {
+          try {
+            let competency
+            let similar: Array<{
+              id: string
+              name: string
+              type: string
+              description: string
+              similarity: number
+            }> = []
+
+            // 1. Check if competency with exact name and type exists
+            const query = await ctx.db.$queryRawUnsafe(`
+              SELECT c.*, ce.embeddings::text
+              FROM "competencies" c
+              LEFT JOIN "competency_embeddings" ce ON c.id = ce."competencyId"
+              WHERE LOWER(c.name) = LOWER($1) AND c.type = $2::"CompetencyType"
+              LIMIT 1
+            `, extractedComp.name, extractedComp.type) as Array<{
+              id: string
+              name: string
+              type: string
+              description: string | null
+              isDraft: boolean
+              createdAt: Date
+              updatedAt: Date
+              embeddings: string | null
+            }>
+
+            const existing = query[0] || null
+
+            let vectorString = ''
+
+            if (existing) {
+              // Competency exists - use it and set similar to empty array
+              competency = existing;
+              vectorString = existing.embeddings || '';
+
+              if (vectorString === '') {
+                const embedding = await generateEmbedding(extractedComp.name)
+                vectorString = `[${embedding.join(',')}]`
+                console.log("🔄 Generating missing embedding for existing competency:", existing.name)
+                await ctx.db.$executeRawUnsafe(`
+                INSERT INTO "competency_embeddings" ("id", "competencyId", "embeddings", "createdAt", "updatedAt")
+                VALUES ($1, $2, $3::vector, NOW(), NOW())
+              `, randomUUID(), existing.id, vectorString)
+              }
+
+              console.log("ℹ️ Competency already exists:", existing.name)
+            } else {
+              // 2. Competency doesn't exist - generate embedding and create as draft
+              const embedding = await generateEmbedding(extractedComp.name)
+              vectorString = `[${embedding.join(',')}]`
+
+              // Create the competency as draft
+              competency = await ctx.db.competency.create({
+                data: {
+                  name: extractedComp.name,
+                  type: extractedComp.type,
+                  description: extractedComp.description,
+                  isDraft: true,
+                },
+              })
+
+              await ctx.db.$executeRawUnsafe(`
+                INSERT INTO "competency_embeddings" ("id", "competencyId", "embeddings", "createdAt", "updatedAt")
+                VALUES ($1, $2, $3::vector, NOW(), NOW())
+              `, randomUUID(), competency.id, vectorString)
+
+              console.log("➕ Created new draft competency:", competency.name)
+            }
+
+            // Store embedding with pgvector format
+
+
+            // 3. Find similar competencies with >75% match
+            const similarResults = await ctx.db.$queryRawUnsafe(`
+                SELECT 
+                  c.id, 
+                  c.name, 
+                  c.type, 
+                  c.description,
+                  1 - (ce.embeddings <=> $1::vector) AS similarity
+                FROM "competencies" c
+                INNER JOIN "competency_embeddings" ce ON c.id = ce."competencyId"
+                WHERE 
+                  c."isDraft" = false AND
+                  c.id != $2 AND
+                  ce.embeddings IS NOT NULL AND
+                  1 - (ce.embeddings <=> $1::vector) >= 0.75
+                ORDER BY similarity DESC
+                LIMIT 10
+              `, vectorString, competency.id) as Array<{
+              id: string
+              name: string
+              type: string
+              description: string | null
+              similarity: number
+            }>
+
+            similar = similarResults.map(result => ({
+              id: result.id,
+              name: result.name,
+              type: result.type,
+              description: result.description || '',
+              similarity: Number(result.similarity),
+            }))
+
+            // Add processed competency to results
+            processedCompetencies.push({
+              name: extractedComp.name,
+              type: extractedComp.type,
+              description: extractedComp.description,
+              suggestedProficiency: extractedComp.suggestedProficiency,
+              id: competency.id,
+              similar: similar,
+            })
+
+            
+            if (similar.length > 0) {
+              console.log("🔍 Found similar competencies:", similar.length)
+              for (const sim of similar) {
+                console.log(`   - ${sim.name} (${(sim.similarity * 100).toFixed(2)}% similar)`)
+              }
+            }
+          } catch (compError) {
+            console.error(`Error processing competency ${extractedComp.name}:`, compError)
+            // Skip this competency but continue with others
+          }
+        }
+
         return {
-          extractedCompetencies: responseData.competencies,
+          extractedCompetencies: processedCompetencies,
           entityName: input.entityName,
         }
       } catch (error: any) {

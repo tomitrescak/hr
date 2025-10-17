@@ -2,6 +2,7 @@
 
 import { PrismaClient } from '@prisma/client'
 import { generateEmbedding } from '../lib/services/embedding'
+import { randomUUID } from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -36,13 +37,13 @@ async function generateEmbeddingsForExistingCompetencies() {
         console.log(`⚡ Processing: ${competency.name} (${competency.type})`)
         
         const embedding = await generateEmbedding(competency.name)
+        const vectorString = `[${embedding.join(',')}]`
         
-        await prisma.competencyEmbedding.create({
-          data: {
-            competencyId: competency.id,
-            embedding
-          }
-        })
+        // Use raw SQL to insert both embedding formats
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO "competency_embeddings" ("id", "competencyId", "embeddings", "createdAt", "updatedAt")
+          VALUES ($1, $2, $3::vector, NOW(), NOW())
+        `, randomUUID(), competency.id, embedding, vectorString)
 
         processed++
         console.log(`✅ Generated embedding for: ${competency.name}`)
