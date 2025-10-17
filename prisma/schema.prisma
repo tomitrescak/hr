@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,7 +7,267 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enums
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  role         Role        @default(USER)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  changeLogs   ChangeLog[]
+  person       Person?
+
+  @@map("users")
+}
+
+model Person {
+  id                 String              @id @default(uuid())
+  userId             String              @unique
+  name               String
+  email              String              @unique
+  alternativeEmail   String?
+  role               Role
+  entryDate          DateTime            @default(now())
+  isActive           Boolean             @default(true)
+  deactivatedAt      DateTime?
+  cv                 String?
+  capacity           Int                 @default(100)
+  photoId            String?
+  courseEnrollments  CourseEnrollment[]
+  photo              Image?              @relation(fields: [photoId], references: [id])
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competencies       PersonCompetency[]
+  oneOnOneReviews    PersonReview[]      @relation("PersonOneOnOneReviews")
+  projectAllocations ProjectAllocation[]
+  taskAssignments    Task[]
+
+  @@map("people")
+}
+
+model Competency {
+  id                 String               @id @default(uuid())
+  type               CompetencyType
+  name               String
+  description        String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  embeddings         CompetencyEmbedding?
+  courseCompetencies CourseCompetency[]
+  personCompetencies PersonCompetency[]
+
+  @@map("competencies")
+}
+
+model CompetencyEmbedding {
+  id           String                 @id @default(uuid())
+  competencyId String                 @unique
+  embedding    Float[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  embeddings   Unsupported("vector")?
+  competency   Competency             @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@index([embeddings])
+  @@index([embeddings], map: "competency_embeddings_embeddings_idx1")
+  @@map("competency_embeddings")
+}
+
+model PersonCompetency {
+  id            String       @id @default(uuid())
+  personId      String
+  competencyId  String
+  proficiency   Proficiency?
+  lastUpdatedAt DateTime     @default(now())
+  competency    Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  person        Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, competencyId])
+  @@map("person_competencies")
+}
+
+model Course {
+  id                    String                 @id @default(uuid())
+  name                  String
+  description           String?
+  content               String?
+  duration              Int?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  type                  CourseType             @default(COURSE)
+  url                   String?
+  competencies          CourseCompetency[]
+  enrollments           CourseEnrollment[]
+  courseSpecialisations SpecialisationCourse[] @relation("CourseToSpecialisationCourse")
+  specialisationCourses SpecialisationCourse[] @relation("SpecialisationToSpecialisationCourse")
+
+  @@map("courses")
+}
+
+model CourseCompetency {
+  id           String       @id @default(uuid())
+  courseId     String
+  competencyId String
+  proficiency  Proficiency?
+  competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  course       Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, competencyId])
+  @@map("course_competencies")
+}
+
+model SpecialisationCourse {
+  id               String   @id @default(uuid())
+  specialisationId String
+  courseId         String
+  order            Int?
+  createdAt        DateTime @default(now())
+  course           Course   @relation("CourseToSpecialisationCourse", fields: [courseId], references: [id], onDelete: Cascade)
+  specialisation   Course   @relation("SpecialisationToSpecialisationCourse", fields: [specialisationId], references: [id], onDelete: Cascade)
+
+  @@unique([specialisationId, courseId])
+  @@map("specialisation_courses")
+}
+
+model CourseEnrollment {
+  id          String           @id @default(uuid())
+  courseId    String
+  personId    String
+  status      EnrollmentStatus @default(WISHLIST)
+  progress    Int?             @default(0)
+  completed   Boolean          @default(false)
+  enrolledAt  DateTime         @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  person      Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, personId])
+  @@map("course_enrollments")
+}
+
+model Project {
+  id          String              @id @default(uuid())
+  name        String
+  description String
+  status      ProjectStatus       @default(ACTIVE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  okrs        OKR[]
+  allocations ProjectAllocation[]
+  tasks       Task[]
+
+  @@map("projects")
+}
+
+model OKR {
+  id          String      @id @default(uuid())
+  projectId   String
+  title       String
+  description String
+  metric      String?
+  target      String?
+  dueDate     DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  keyResults  KeyResult[]
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@map("okrs")
+}
+
+model KeyResult {
+  id          String    @id @default(uuid())
+  okrId       String
+  title       String
+  description String?
+  progress    Int       @default(0)
+  target      String?
+  metric      String?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  okr         OKR       @relation(fields: [okrId], references: [id], onDelete: Cascade)
+
+  @@map("key_results")
+}
+
+model ProjectAllocation {
+  id                 String   @id @default(uuid())
+  projectId          String
+  personId           String?
+  title              String
+  description        String
+  capacityAllocation Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  person             Person?  @relation(fields: [personId], references: [id])
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_allocations")
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  projectId   String
+  okrId       String?
+  title       String
+  description String?
+  assigneeId  String?
+  priority    Priority? @default(MEDIUM)
+  state       LeanState @default(BACKLOG)
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assignee    Person?   @relation(fields: [assigneeId], references: [id])
+  okr         OKR?      @relation(fields: [okrId], references: [id])
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+model PersonReview {
+  id            String   @id @default(uuid())
+  personId      String
+  recordingText String
+  notes         String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  person        Person   @relation("PersonOneOnOneReviews", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@map("person_reviews")
+}
+
+model ChangeLog {
+  id          String         @id @default(uuid())
+  entity      EntityKind_old
+  entityId    String
+  field       String
+  fromValue   Json?
+  toValue     Json?
+  state       ChangeState
+  changedAt   DateTime       @default(now())
+  changedById String
+  changedBy   User           @relation(fields: [changedById], references: [id])
+
+  @@index([entity, entityId])
+  @@index([changedAt])
+  @@map("change_logs")
+}
+
+model Image {
+  id        String   @id @default(uuid())
+  data      String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  persons   Person[]
+
+  @@map("images")
+}
+
 enum Role {
   USER
   PROJECT_MANAGER
@@ -42,8 +299,6 @@ enum LeanState {
   DONE
 }
 
-
-
 enum Contribution {
   LOW
   MEDIUM
@@ -53,19 +308,6 @@ enum Contribution {
 enum ChangeState {
   CREATED
   MODIFIED
-}
-
-
-enum EntityKind {
-  PERSON
-  COURSE
-  PROJECT
-  TASK
-  PERSON_COMPETENCY
-  COURSE_COMPETENCY
-  PROJECT_ALLOCATION
-  OKR
-  KEY_RESULT
 }
 
 enum Priority {
@@ -86,306 +328,20 @@ enum ProjectStatus {
   PLANNING
 }
 
-// Models
-model User {
-  id           String @id @default(uuid())
-  email        String @unique
-  passwordHash String
-  name         String
-  role         Role   @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relations
-  person Person?
-  changeLogs         ChangeLog[]
-
-  @@map("users")
-}
-
-model Person {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  name             String
-  email            String   @unique
-  alternativeEmail String?
-  role             Role
-  entryDate        DateTime @default(now())
-  isActive         Boolean  @default(true)
-  deactivatedAt    DateTime?
-  cv               String?  // CV content for competency extraction
-  capacity         Int      @default(100) // Person's capacity percentage (0-100)
-  photoId          String?  // Reference to photo in Images table
-
-  // Relations
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  photo               Image?              @relation(fields: [photoId], references: [id], onDelete: SetNull)
-  competencies        PersonCompetency[]
-  oneOnOneReviews     PersonReview[]      @relation("PersonOneOnOneReviews")
-  taskAssignments     Task[]
-  projectAllocations  ProjectAllocation[]
-  courseEnrollments   CourseEnrollment[]
-
-  @@map("people")
-}
-
-model Competency {
-  id          String         @id @default(uuid())
-  type        CompetencyType
-  name        String
-  description String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  // Relations
-  personCompetencies PersonCompetency[]
-  courseCompetencies CourseCompetency[]
-  embeddings         CompetencyEmbedding?
-
-  @@map("competencies")
-}
-
-model CompetencyEmbedding {
-  id            String   @id @default(uuid())
-  competencyId  String   @unique
-  embedding     Float[]  // Array of floats for vector embedding
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-
-  @@map("competency_embeddings")
-}
-
-model PersonCompetency {
-  id            String       @id @default(uuid())
-  personId      String
-  competencyId  String
-  proficiency   Proficiency?
-  lastUpdatedAt DateTime     @default(now())
-
-  // Relations
-  person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
-  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-
-  @@unique([personId, competencyId])
-  @@map("person_competencies")
-}
-
-model Course {
-  id             String        @id @default(uuid())
-  name           String
-  description    String?
-  content        String?
-  url            String?       // External URL for the course
-  type           CourseType    @default(COURSE)
-  duration       Int?          // Duration in hours
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  // Relations
-  competencies CourseCompetency[]
-  enrollments  CourseEnrollment[]
-  
-  // Specialisation relations
-  specialisationCourses SpecialisationCourse[] @relation("SpecialisationToSpecialisationCourse")
-  courseSpecialisations SpecialisationCourse[] @relation("CourseToSpecialisationCourse")
-
-  @@map("courses")
-}
-
-model CourseCompetency {
-  id           String       @id @default(uuid())
-  courseId     String
-  competencyId String
-  proficiency  Proficiency?
-
-  // Relations
-  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-
-  @@unique([courseId, competencyId])
-  @@map("course_competencies")
-}
-
-model SpecialisationCourse {
-  id               String @id @default(uuid())
-  specialisationId String
-  courseId         String
-  order            Int?   // Optional ordering for courses within specialisation
-  createdAt        DateTime @default(now())
-
-  // Relations
-  specialisation Course @relation("SpecialisationToSpecialisationCourse", fields: [specialisationId], references: [id], onDelete: Cascade)
-  course         Course @relation("CourseToSpecialisationCourse", fields: [courseId], references: [id], onDelete: Cascade)
-
-  @@unique([specialisationId, courseId])
-  @@map("specialisation_courses")
-}
-
 enum EnrollmentStatus {
   WISHLIST
   IN_PROGRESS
   COMPLETED
 }
 
-model CourseEnrollment {
-  id          String           @id @default(uuid())
-  courseId    String
-  personId    String
-  status      EnrollmentStatus @default(WISHLIST)
-  progress    Int?             @default(0) // 0-100
-  completed   Boolean          @default(false)
-  enrolledAt  DateTime         @default(now())
-  startedAt   DateTime?
-  completedAt DateTime?
-
-  // Relations
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
-
-  @@unique([courseId, personId])
-  @@map("course_enrollments")
-}
-
-model Project {
-  id          String        @id @default(uuid())
-  name        String
-  description String
-  status      ProjectStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  // Relations
-  okrs         OKR[]
-  allocations  ProjectAllocation[]
-  tasks        Task[]
-
-  @@map("projects")
-}
-
-model OKR {
-  id          String    @id @default(uuid())
-  projectId   String
-  title       String
-  description String
-  metric      String?
-  target      String?
-  dueDate     DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Relations
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  keyResults KeyResult[]
-  tasks      Task[]
-
-  @@map("okrs")
-}
-
-model KeyResult {
-  id          String    @id @default(uuid())
-  okrId       String
-  title       String
-  description String?
-  progress    Int       @default(0) // 0-100 percentage (replaces completion)
-  target      String?
-  metric      String?
-  dueDate     DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Relations
-  okr OKR @relation(fields: [okrId], references: [id], onDelete: Cascade)
-
-  @@map("key_results")
-}
-
-model ProjectAllocation {
-  id                 String  @id @default(uuid())
-  projectId          String
-  personId           String?
-  title              String
-  description        String
-  capacityAllocation Int     @default(0) // Percentage of person's capacity allocated (0-100)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  person  Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
-
-  @@map("project_allocations")
-}
-
-model Task {
-  id          String     @id @default(uuid())
-  projectId   String
-  okrId       String?    // Optional assignment to OKR
-  title       String
-  description String?
-  assigneeId  String?
-  priority    Priority?  @default(MEDIUM)
-  state       LeanState  @default(BACKLOG)
-  dueDate     DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  // Relations
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  okr      OKR?    @relation(fields: [okrId], references: [id], onDelete: SetNull)
-  assignee Person? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
-
-  @@map("tasks")
-}
-
-
-
-
-model PersonReview {
-  id            String   @id @default(uuid())
-  personId      String
-  recordingText String   // Transcribed text from recording
-  notes         String   // Final processed notes
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  person Person @relation("PersonOneOnOneReviews", fields: [personId], references: [id], onDelete: Cascade)
-
-  @@map("person_reviews")
-}
-
-model ChangeLog {
-  id         String      @id @default(uuid())
-  entity     EntityKind
-  entityId   String
-  field      String
-  fromValue  Json?
-  toValue    Json?
-  state      ChangeState
-  changedAt  DateTime    @default(now())
-  changedById String
-
-  // Relations
-  changedBy User @relation(fields: [changedById], references: [id])
-
-  @@index([entity, entityId])
-  @@index([changedAt])
-  @@map("change_logs")
-}
-
-model Image {
-  id        String   @id @default(uuid())
-  data      String   // Base64 encoded image data
-  mimeType  String   // MIME type (e.g., "image/jpeg")
-  size      Int      // Size in bytes
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  persons Person[]
-
-  @@map("images")
+enum EntityKind_old {
+  PERSON
+  COURSE
+  PROJECT
+  TASK
+  PERSON_COMPETENCY
+  COURSE_COMPETENCY
+  PROJECT_ALLOCATION
+  OKR
+  KEY_RESULT
 }
