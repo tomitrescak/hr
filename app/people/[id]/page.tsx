@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { CompetencyGrid } from "@/components/ui/competency"
 import { trpc } from "@/lib/trpc/client"
-import { Role } from "@prisma/client"
+import { CompetencyType, Proficiency, Role } from "@prisma/client"
 import { ArrowLeft, User, BookOpen, Calendar, MessageSquare, Edit, Save, X, Grid3X3, List, Plus, Trash2, Settings, ChevronUp, ChevronDown, CheckSquare, CheckCircle, ExternalLink, Mic, MicOff, Loader2 as LoaderIcon, FileText, Square } from "lucide-react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
@@ -24,7 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Search } from 'lucide-react'
 import { DevelopmentPlan } from '@/components/courses/DevelopmentPlan'
-import { CompetencyExtractor } from '@/components/courses/CompetencyExtractor'
+import { CompetencyExtractor, CompetencyHandler } from '@/components/courses/CompetencyExtractor'
 import { Avatar } from '@/components/ui/avatar'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import CVFileUpload from '@/components/CVFileUpload'
@@ -38,6 +38,8 @@ interface PersonPageProps {
   }>
 }
 
+
+
 export default function PersonPage({ params }: PersonPageProps) {
   const { id } = use(params)
   const router = useRouter()
@@ -48,7 +50,7 @@ export default function PersonPage({ params }: PersonPageProps) {
   const [editCompetencyOpen, setEditCompetencyOpen] = useState(false)
   const [selectedCompetency, setSelectedCompetency] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('profile')
-  
+
   // Handle URL hash for tab switching (e.g., when coming back from review page)
   React.useEffect(() => {
     const hash = window.location.hash.substring(1)
@@ -61,15 +63,15 @@ export default function PersonPage({ params }: PersonPageProps) {
   const [taskSortBy, setTaskSortBy] = useState<'title' | 'dueDate' | 'priority' | 'state' | 'project' | null>(null)
   const [taskSortDirection, setTaskSortDirection] = useState<'asc' | 'desc'>('asc')
   const [taskStateFilter, setTaskStateFilter] = useState<string>('all')
-  const [profileForm, setProfileForm] = useState({ 
-    name: "", 
-    email: "", 
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    email: "",
     role: "USER" as Role,
     entryDate: "",
     cv: "",
     photo: ""
   })
-  
+
   // Reviews state
   const [isRecording, setIsRecording] = useState(false)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
@@ -89,21 +91,21 @@ export default function PersonPage({ params }: PersonPageProps) {
     recordingText: ''
   })
   const [showReviewForm, setShowReviewForm] = useState(false)
-  
+
   // Real-time transcription state
   const [isLiveTranscribing, setIsLiveTranscribing] = useState(false)
   const [recognition, setRecognition] = useState<any | null>(null)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [useRealTimeTranscription, setUseRealTimeTranscription] = useState(true)
   const [editingAnalysis, setEditingAnalysis] = useState(false)
-  
+
   // CV upload state
   const [cvUploadError, setCvUploadError] = useState('')
-  
+
   // Photo upload state
   const [showPhotoCropper, setShowPhotoCropper] = useState(false)
-  
-  
+
+
   const utils = trpc.useUtils()
   const { data: person, isLoading, refetch } = trpc.people.getById.useQuery({ id })
   const updateMe = trpc.people.updateMe.useMutation()
@@ -113,18 +115,18 @@ export default function PersonPage({ params }: PersonPageProps) {
     onMutate: async ({ personId, competencyId, proficiency }) => {
       // Cancel outgoing refetches (so they don't overwrite our optimistic update)
       await utils.people.getById.cancel({ id: personId })
-      
+
       // Snapshot the previous value
       const previousPerson = utils.people.getById.getData({ id: personId })
-      
+
       // Optimistically update the UI
       if (previousPerson) {
-        const existingCompetencyIndex = previousPerson.competencies.findIndex((pc: any) => 
+        const existingCompetencyIndex = previousPerson.competencies.findIndex((pc: any) =>
           pc.competency.id === competencyId
         )
-        
+
         let updatedCompetencies
-        
+
         if (existingCompetencyIndex >= 0) {
           // Update existing competency
           updatedCompetencies = previousPerson.competencies.map((pc: any, index: number) => {
@@ -156,13 +158,13 @@ export default function PersonPage({ params }: PersonPageProps) {
             updatedCompetencies = previousPerson.competencies
           }
         }
-        
+
         utils.people.getById.setData({ id: personId }, {
           ...previousPerson,
           competencies: updatedCompetencies
         })
       }
-      
+
       return { previousPerson }
     },
     onError: (err, variables, context) => {
@@ -180,22 +182,22 @@ export default function PersonPage({ params }: PersonPageProps) {
     onMutate: async ({ personId, competencyId }) => {
       // Cancel outgoing refetches
       await utils.people.getById.cancel({ id: personId })
-      
+
       // Snapshot the previous value
       const previousPerson = utils.people.getById.getData({ id: personId })
-      
+
       // Optimistically remove the competency
       if (previousPerson) {
-        const updatedCompetencies = previousPerson.competencies.filter((pc: any) => 
+        const updatedCompetencies = previousPerson.competencies.filter((pc: any) =>
           pc.competency.id !== competencyId
         )
-        
+
         utils.people.getById.setData({ id: personId }, {
           ...previousPerson,
           competencies: updatedCompetencies
         })
       }
-      
+
       return { previousPerson }
     },
     onError: (err, variables, context) => {
@@ -211,11 +213,11 @@ export default function PersonPage({ params }: PersonPageProps) {
   })
   const createCompetency = trpc.competencies.create.useMutation()
   const { data: tasksData } = trpc.people.getTasksForPerson.useQuery({ personId: id })
-  
+
   // Person reviews data
   const { data: personReviews, refetch: refetchReviews } = trpc.personReviews.getByPersonId.useQuery({ personId: id })
   const createPersonReview = trpc.personReviews.create.useMutation()
-  
+
   // Convert person competencies to our competency format
   const competencies = React.useMemo(() => {
     return (person as any)?.competencies?.map((pc: any) => ({
@@ -241,11 +243,11 @@ export default function PersonPage({ params }: PersonPageProps) {
   // Sort competencies
   const sortedCompetencies = React.useMemo(() => {
     if (!sortBy) return competencies
-    
+
     return [...competencies].sort((a, b) => {
       let aValue: any
       let bValue: any
-      
+
       switch (sortBy) {
         case 'name':
           aValue = a.name.toLowerCase()
@@ -268,13 +270,13 @@ export default function PersonPage({ params }: PersonPageProps) {
         default:
           return 0
       }
-      
+
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
       return 0
     })
   }, [competencies, sortBy, sortDirection])
-  
+
   // Handle task sorting
   const handleTaskSort = (column: 'title' | 'dueDate' | 'priority' | 'state' | 'project') => {
     if (taskSortBy === column) {
@@ -288,21 +290,21 @@ export default function PersonPage({ params }: PersonPageProps) {
   // Sort and filter tasks
   const sortedAndFilteredTasks = React.useMemo(() => {
     if (!tasksData?.allTasks) return []
-    
+
     let filtered = [...tasksData.allTasks]
-    
+
     // Apply state filter
     if (taskStateFilter !== 'all') {
       filtered = filtered.filter(task => task.state === taskStateFilter)
     }
-    
+
     // Apply sorting
     if (!taskSortBy) return filtered
-    
+
     return filtered.sort((a, b) => {
       let aValue: any
       let bValue: any
-      
+
       switch (taskSortBy) {
         case 'title':
           aValue = a.title.toLowerCase()
@@ -329,17 +331,17 @@ export default function PersonPage({ params }: PersonPageProps) {
         default:
           return 0
       }
-      
+
       if (aValue < bValue) return taskSortDirection === 'asc' ? -1 : 1
       if (aValue > bValue) return taskSortDirection === 'asc' ? 1 : -1
       return 0
     })
   }, [tasksData?.allTasks, taskSortBy, taskSortDirection, taskStateFilter])
-  
+
   const handleEditProfile = () => {
     if (!person) return
-    setProfileForm({ 
-      name: person.name, 
+    setProfileForm({
+      name: person.name,
       email: person.email,
       role: person.role,
       entryDate: person.entryDate ? new Date(person.entryDate).toISOString().split('T')[0] : "",
@@ -348,10 +350,10 @@ export default function PersonPage({ params }: PersonPageProps) {
     })
     setEditingProfile(true)
   }
-  
+
   const handleSaveProfile = async () => {
     if (!person) return
-    
+
     try {
       const updates = {
         name: profileForm.name,
@@ -361,13 +363,13 @@ export default function PersonPage({ params }: PersonPageProps) {
         photo: profileForm.photo || undefined,
         ...(session?.user?.role === 'PROJECT_MANAGER' && { role: profileForm.role })
       }
-      
+
       if (session?.user?.role === 'PROJECT_MANAGER') {
         await updatePerson.mutateAsync({ id: person.id, ...updates })
       } else {
         await updateMe.mutateAsync(updates)
       }
-      
+
       setEditingProfile(false)
       refetch()
     } catch (error) {
@@ -376,7 +378,7 @@ export default function PersonPage({ params }: PersonPageProps) {
   }
 
   // Check if current user can manage this person's competencies
-  const canManageCompetencies = !!(session?.user?.role === 'PROJECT_MANAGER' || 
+  const canManageCompetencies = !!(session?.user?.role === 'PROJECT_MANAGER' ||
     (session?.user?.id && person?.userId === session.user.id))
 
   // Real-time speech recognition setup
@@ -384,19 +386,19 @@ export default function PersonPage({ params }: PersonPageProps) {
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition
       const recognitionInstance = new SpeechRecognition()
-      
+
       recognitionInstance.continuous = true
       recognitionInstance.interimResults = true
       recognitionInstance.lang = 'en-US'
-      
+
       recognitionInstance.onstart = () => {
         setIsLiveTranscribing(true)
       }
-      
+
       recognitionInstance.onresult = (event: any) => {
         let finalTranscript = ''
         let interimTranscript = ''
-        
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript
           if (event.results[i].isFinal) {
@@ -405,21 +407,21 @@ export default function PersonPage({ params }: PersonPageProps) {
             interimTranscript += transcript
           }
         }
-        
+
         if (finalTranscript) {
           setLiveTranscript(prev => prev + finalTranscript + ' ')
           setTranscribedText(prev => prev + finalTranscript + ' ')
         }
       }
-      
+
       recognitionInstance.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error)
       }
-      
+
       recognitionInstance.onend = () => {
         setIsLiveTranscribing(false)
       }
-      
+
       setRecognition(recognitionInstance)
     }
   }, [])
@@ -446,13 +448,13 @@ export default function PersonPage({ params }: PersonPageProps) {
       recorder.start()
       setMediaRecorder(recorder)
       setIsRecording(true)
-      
+
       // Start real-time transcription if enabled and available
       if (useRealTimeTranscription && recognition) {
         setLiveTranscript('')
         recognition.start()
       }
-      
+
     } catch (error) {
       console.error('Error starting recording:', error)
       alert('Could not access microphone. Please check permissions.')
@@ -464,7 +466,7 @@ export default function PersonPage({ params }: PersonPageProps) {
       mediaRecorder.stop()
       setIsRecording(false)
     }
-    
+
     // Stop real-time transcription
     if (recognition && isLiveTranscribing) {
       recognition.stop()
@@ -500,7 +502,7 @@ export default function PersonPage({ params }: PersonPageProps) {
 
       const data = await response.json()
       setTranscribedText(data.text)
-      setNewReviewForm(prev => ({...prev, recordingText: data.text}))
+      setNewReviewForm(prev => ({ ...prev, recordingText: data.text }))
     } catch (error) {
       console.error('Transcription error:', error)
       alert(`Failed to transcribe audio: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -528,11 +530,11 @@ export default function PersonPage({ params }: PersonPageProps) {
 
       const data = await response.json()
       setAnalyzedData(data)
-      
+
       // Automatically populate the final notes with the formatted markdown
       const markdownNotes = formatAnalyzedDataAsMarkdown(data)
-      setNewReviewForm(prev => ({...prev, notes: markdownNotes}))
-      
+      setNewReviewForm(prev => ({ ...prev, notes: markdownNotes }))
+
     } catch (error) {
       console.error('Analysis error:', error)
       alert('Failed to analyze transcription. Please try again.')
@@ -550,7 +552,7 @@ export default function PersonPage({ params }: PersonPageProps) {
     setAnalyzedData(null)
     setEditingAnalysis(false)
     setNewReviewForm({ notes: '', recordingText: '' })
-    
+
     // Stop recognition if running
     if (recognition && isLiveTranscribing) {
       recognition.stop()
@@ -566,7 +568,7 @@ export default function PersonPage({ params }: PersonPageProps) {
         recordingText: transcribedText,
         notes: newReviewForm.notes,
       })
-      
+
       setShowReviewForm(false)
       resetReviewForm()
       refetchReviews()
@@ -580,8 +582,8 @@ export default function PersonPage({ params }: PersonPageProps) {
   // Helper function to format analyzed data as markdown
   const formatAnalyzedDataAsMarkdown = (data: typeof analyzedData): string => {
     if (!data) return ''
-    
-    const tasksMarkdown = data.tasks.length > 0 
+
+    const tasksMarkdown = data.tasks.length > 0
       ? data.tasks.map(task => `- ${task}`).join('\n')
       : '- No action items identified'
 
@@ -614,11 +616,11 @@ ${tasksMarkdown}`
         negative: extractSection(markdown, '## Areas for Improvement', '## Action Items'),
         tasks: extractTasksList(markdown)
       }
-      
+
       setAnalyzedData(sections)
-      
+
       // Also update the final notes with the modified markdown
-      setNewReviewForm(prev => ({...prev, notes: markdown}))
+      setNewReviewForm(prev => ({ ...prev, notes: markdown }))
     } catch (error) {
       console.error('Error parsing markdown:', error)
     }
@@ -628,14 +630,14 @@ ${tasksMarkdown}`
   const extractSection = (text: string, startHeading: string, endHeading: string): string => {
     const startIndex = text.indexOf(startHeading)
     if (startIndex === -1) return ''
-    
+
     const contentStart = startIndex + startHeading.length
     const endIndex = text.indexOf(endHeading, contentStart)
-    
-    const content = endIndex === -1 
+
+    const content = endIndex === -1
       ? text.substring(contentStart).trim()
       : text.substring(contentStart, endIndex).trim()
-    
+
     return content.replace(/^\n+|\n+$/g, '') // Remove leading/trailing newlines
   }
 
@@ -643,22 +645,22 @@ ${tasksMarkdown}`
   const extractTasksList = (text: string): string[] => {
     const actionItemsIndex = text.indexOf('## Action Items')
     if (actionItemsIndex === -1) return []
-    
+
     const tasksSection = text.substring(actionItemsIndex + '## Action Items'.length).trim()
     const lines = tasksSection.split('\n')
-    
+
     const tasks = lines
       .filter(line => line.trim().startsWith('- '))
       .map(line => line.trim().substring(2).trim())
       .filter(task => task.length > 0 && task !== 'No action items identified')
-    
+
     return tasks
   }
 
   // Markdown to HTML conversion using marked package
   const markdownToHtml = (markdown: string): string => {
     if (!markdown) return ''
-    
+
     try {
       return marked(markdown) as string
     } catch (error) {
@@ -706,36 +708,40 @@ ${tasksMarkdown}`
     const years = Math.floor(diffDays / 365)
     const months = Math.floor((diffDays % 365) / 30)
     const days = diffDays % 30
-    
+
     const parts = []
     if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`)
     if (months > 0) parts.push(`${months} month${months > 1 ? 's' : ''}`)
     if (days > 0 && years === 0) parts.push(`${days} day${days > 1 ? 's' : ''}`)
-    
+
     return parts.length > 0 ? parts.join(', ') : 'Less than a day'
   }
 
-  const handleAddCompetency = async (competencyId: string, proficiency?: string) => {
+  const handleAddCompetency: CompetencyHandler = async (input) => {
+
     if (!person) return
-    
+
     // Close dialog immediately for optimistic UX
     setAddCompetencyOpen(false)
-    
+
     // Fire and forget - optimistic updates handle the UI
     upsertCompetency.mutate({
       personId: person.id,
-      competencyId,
-      proficiency: proficiency as any
+      competencyId: input.competencyId,
+      description: input.description,
+      name: input.name,
+      type: input.type,
+      proficiency: input.proficiency,
     })
   }
 
   const handleEditCompetency = (competencyId: string, proficiency?: string) => {
     if (!person) return
-    
+
     // Close dialog immediately for optimistic UX
     setEditCompetencyOpen(false)
     setSelectedCompetency(null)
-    
+
     // Fire and forget - optimistic updates handle the UI
     upsertCompetency.mutate({
       personId: person.id,
@@ -747,7 +753,7 @@ ${tasksMarkdown}`
   const handleRemoveCompetency = (competencyId: string, competencyName: string) => {
     if (!person) return
     if (!confirm(`Are you sure you want to remove "${competencyName}" from ${person.name}?`)) return
-    
+
     // Fire and forget - optimistic updates handle the UI
     removeCompetency.mutate({
       personId: person.id,
@@ -877,7 +883,7 @@ ${tasksMarkdown}`
                         />
                       </div>
                     </div>
-                    
+
                     {/* Photo Upload Section */}
                     <div className="space-y-4">
                       <Label>Profile Photo</Label>
@@ -896,7 +902,7 @@ ${tasksMarkdown}`
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="flex-1 space-y-4">
                           {!showPhotoCropper ? (
                             <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
@@ -924,7 +930,7 @@ ${tasksMarkdown}`
                               onCancel={() => setShowPhotoCropper(false)}
                             />
                           )}
-                          
+
                           {profileForm.photo && !showPhotoCropper && (
                             <div className="flex items-center gap-2">
                               <div className="flex-1 text-sm text-green-600">
@@ -943,52 +949,52 @@ ${tasksMarkdown}`
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-4">
-                        
-                        
-                        {/* Manual Text Entry */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xl">
-                            <Label htmlFor="cv" className="text-xl">CV / Resume</Label>
-                            <span className="text-xs text-gray-500">
-                              {profileForm.cv.length} characters
-                            </span>
-                          </div>
-                          <Textarea
-                            id="cv"
-                            value={profileForm.cv}
-                            onChange={(e) => setProfileForm(prev => ({ ...prev, cv: e.target.value }))}
-                            rows={8}
-                            placeholder="Paste your CV or resume content here for AI competency extraction..."
-                          />
-                          <p className="text-xs text-gray-500">
-                            The CV content will be used for automatic competency extraction using AI
-                          </p>
+
+
+                      {/* Manual Text Entry */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xl">
+                          <Label htmlFor="cv" className="text-xl">CV / Resume</Label>
+                          <span className="text-xs text-gray-500">
+                            {profileForm.cv.length} characters
+                          </span>
                         </div>
+                        <Textarea
+                          id="cv"
+                          value={profileForm.cv}
+                          onChange={(e) => setProfileForm(prev => ({ ...prev, cv: e.target.value }))}
+                          rows={8}
+                          placeholder="Paste your CV or resume content here for AI competency extraction..."
+                        />
+                        <p className="text-xs text-gray-500">
+                          The CV content will be used for automatic competency extraction using AI
+                        </p>
+                      </div>
 
                       {/* File Upload Section */}
-                        <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
-                          <h4 className="font-medium text-gray-900 mb-2 text-xl">Upload CV File</h4>
-                          <p className="text-sm text-gray-600 mb-4">
-                            Upload your CV file for automatic processing and competency extraction
-                          </p>
-                          <CVFileUpload
-                            onFileProcessed={(content) => {
-                              setProfileForm(prev => ({ ...prev, cv: content }))
-                              setCvUploadError('')
-                            }}
-                            onError={(error) => setCvUploadError(error)}
-                            className=""
-                          />
-                          {cvUploadError && (
-                            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
-                              {cvUploadError}
-                            </div>
-                          )}
-                        </div>
+                      <div className="p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
+                        <h4 className="font-medium text-gray-900 mb-2 text-xl">Upload CV File</h4>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Upload your CV file for automatic processing and competency extraction
+                        </p>
+                        <CVFileUpload
+                          onFileProcessed={(content) => {
+                            setProfileForm(prev => ({ ...prev, cv: content }))
+                            setCvUploadError('')
+                          }}
+                          onError={(error) => setCvUploadError(error)}
+                          className=""
+                        />
+                        {cvUploadError && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+                            {cvUploadError}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    
+
                     <div className="flex gap-2">
                       <Button onClick={handleSaveProfile} disabled={updateMe.isPending || updatePerson.isPending}>
                         <Save className="h-4 w-4 mr-2" />
@@ -1000,7 +1006,7 @@ ${tasksMarkdown}`
                       </Button>
                     </div>
                   </>
-) : (
+                ) : (
                   <div className="space-y-6">
                     <div className="flex items-start gap-6 mb-6 p-6 bg-muted/30 rounded-lg">
                       <Avatar
@@ -1039,9 +1045,9 @@ ${tasksMarkdown}`
                         </div>
                       </div>
                     </div>
-                    
-                    
-                    
+
+
+
                     {/* Courses Section */}
                     {(person as any).courseEnrollments && (person as any).courseEnrollments.length > 0 && (
                       <div>
@@ -1073,19 +1079,19 @@ ${tasksMarkdown}`
                                     icon: BookOpen
                                   },
                                   IN_PROGRESS: {
-                                    label: 'In Progress', 
+                                    label: 'In Progress',
                                     className: 'bg-blue-100 text-blue-800',
                                     icon: Calendar
                                   },
                                   COMPLETED: {
                                     label: 'Completed',
-                                    className: 'bg-green-100 text-green-800', 
+                                    className: 'bg-green-100 text-green-800',
                                     icon: CheckCircle
                                   }
                                 }
                                 const config = statusConfig[enrollment.status as keyof typeof statusConfig] || statusConfig.WISHLIST
                                 const StatusIcon = config.icon
-                                
+
                                 return (
                                   <TableRow key={enrollment.id}>
                                     <TableCell>
@@ -1111,8 +1117,8 @@ ${tasksMarkdown}`
                                     <TableCell>
                                       <div className="flex items-center gap-2">
                                         <div className="w-16 bg-gray-200 rounded-full h-2">
-                                          <div 
-                                            className="bg-blue-600 h-2 rounded-full" 
+                                          <div
+                                            className="bg-blue-600 h-2 rounded-full"
                                             style={{ width: `${enrollment.progress || 0}%` }}
                                           ></div>
                                         </div>
@@ -1146,36 +1152,36 @@ ${tasksMarkdown}`
                         </div>
                       </div>
                     )}
-                    
+
                     {/* CV Section */}
                     {person.cv && (
                       <div>
-                        
+
                         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 mb-4"> <BookOpen className="h-5 w-5" /> CV / Resume</h3>
-                        
+
                         <hr className="mb-4" />
-                        <div 
+                        <div
                           className="cv-content"
                           dangerouslySetInnerHTML={{ __html: markdownToHtml(person.cv) }}
                         />
                       </div>
                     )}
                   </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Competencies Tab */}
           <TabsContent value="competencies" className="space-y-4">
-            
-            
+
+
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Competencies ({sortedCompetencies.length})</h2>
                 <p className="text-sm text-muted-foreground">Skills, abilities, and knowledge areas</p>
               </div>
-              
+
               <div className="flex items-center gap-4">
                 {canManageCompetencies && (
                   <Dialog open={addCompetencyOpen} onOpenChange={setAddCompetencyOpen}>
@@ -1190,6 +1196,7 @@ ${tasksMarkdown}`
                         <DialogTitle>Add Competency</DialogTitle>
                       </DialogHeader>
                       <AddCompetencyForm
+                        personId={person.id}
                         availableCompetencies={allCompetencies || []}
                         existingCompetencies={competencies}
                         onAdd={handleAddCompetency}
@@ -1200,7 +1207,7 @@ ${tasksMarkdown}`
                     </DialogContent>
                   </Dialog>
                 )}
-                
+
                 {/* View Toggle */}
                 <div className="flex items-center">
                   <span className="text-sm text-muted-foreground mr-3">View:</span>
@@ -1238,7 +1245,7 @@ ${tasksMarkdown}`
               </Card>
             ) : competencyView === 'cards' ? (
               /* Cards View */
-              <CompetencyGrid 
+              <CompetencyGrid
                 competencies={sortedCompetencies}
                 groupByType={true}
                 showProficiency={true}
@@ -1250,7 +1257,7 @@ ${tasksMarkdown}`
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleSort('name')}
                         >
@@ -1261,7 +1268,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleSort('type')}
                         >
@@ -1272,7 +1279,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleSort('proficiency')}
                         >
@@ -1304,9 +1311,9 @@ ${tasksMarkdown}`
                               {showProficiencyForType && competency.proficiency ? (
                                 <Badge variant="outline" className={
                                   competency.proficiency === 'EXPERT' ? 'bg-green-100 text-green-800' :
-                                  competency.proficiency === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
-                                  competency.proficiency === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
+                                    competency.proficiency === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
+                                      competency.proficiency === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
                                 }>
                                   {competency.proficiency}
                                 </Badge>
@@ -1351,7 +1358,7 @@ ${tasksMarkdown}`
                 </CardContent>
               </Card>
             )}
-            
+
             {/* Edit Competency Dialog */}
             {canManageCompetencies && (
               <Dialog open={editCompetencyOpen} onOpenChange={setEditCompetencyOpen}>
@@ -1380,12 +1387,11 @@ ${tasksMarkdown}`
                 entityName={person.name}
                 content={`Person: ${person.name}\nCV Content:\n${person.cv}`}
                 contextMessage="Use AI to automatically identify and extract competencies from this person's CV content. This will analyze their experience, skills, and qualifications to suggest relevant competencies."
-                onCompetencyAdded={() => {}}
+                onCompetencyAdded={() => { }}
                 canManage={canManageCompetencies}
                 iconColor="text-blue-600"
                 buttonColor="bg-blue-600 hover:bg-blue-700"
                 onAddCompetency={handleAddCompetency}
-                createCompetency={createCompetency}
                 allCompetencies={allCompetencies || []}
                 existingCompetencies={person.competencies || []}
               />
@@ -1401,7 +1407,7 @@ ${tasksMarkdown}`
                   {tasksData?.summary?.active || 0} active, {tasksData?.summary?.completed || 0} completed
                 </p>
               </div>
-              
+
               {/* Filter by State */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -1434,7 +1440,7 @@ ${tasksMarkdown}`
                   <div className="text-2xl font-bold">{tasksData?.summary?.total || 0}</div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Active Tasks</CardTitle>
@@ -1443,7 +1449,7 @@ ${tasksMarkdown}`
                   <div className="text-2xl font-bold text-blue-600">{tasksData?.summary?.active || 0}</div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Completed</CardTitle>
@@ -1452,7 +1458,7 @@ ${tasksMarkdown}`
                   <div className="text-2xl font-bold text-green-600">{tasksData?.summary?.completed || 0}</div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Completion Rate</CardTitle>
@@ -1472,7 +1478,7 @@ ${tasksMarkdown}`
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleTaskSort('title')}
                         >
@@ -1483,7 +1489,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleTaskSort('project')}
                         >
@@ -1494,7 +1500,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleTaskSort('priority')}
                         >
@@ -1505,7 +1511,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleTaskSort('state')}
                         >
@@ -1516,7 +1522,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </TableHead>
-                        <TableHead 
+                        <TableHead
                           className="cursor-pointer select-none hover:bg-muted/50"
                           onClick={() => handleTaskSort('dueDate')}
                         >
@@ -1556,12 +1562,12 @@ ${tasksMarkdown}`
                           </TableCell>
                           <TableCell>
                             {task.priority ? (
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={
                                   task.priority === 'HIGH' ? 'bg-red-50 text-red-700' :
-                                  task.priority === 'MEDIUM' ? 'bg-yellow-50 text-yellow-700' :
-                                  'bg-green-50 text-green-700'
+                                    task.priority === 'MEDIUM' ? 'bg-yellow-50 text-yellow-700' :
+                                      'bg-green-50 text-green-700'
                                 }
                               >
                                 {task.priority}
@@ -1571,14 +1577,14 @@ ${tasksMarkdown}`
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge 
+                            <Badge
                               variant="outline"
                               className={
                                 task.state === 'DONE' ? 'bg-green-50 text-green-700' :
-                                task.state === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-700' :
-                                task.state === 'BLOCKED' ? 'bg-red-50 text-red-700' :
-                                task.state === 'REVIEW' ? 'bg-purple-50 text-purple-700' :
-                                'bg-gray-50 text-gray-700'
+                                  task.state === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-700' :
+                                    task.state === 'BLOCKED' ? 'bg-red-50 text-red-700' :
+                                      task.state === 'REVIEW' ? 'bg-purple-50 text-purple-700' :
+                                        'bg-gray-50 text-gray-700'
                               }
                             >
                               {task.state.replace('_', ' ')}
@@ -1610,8 +1616,8 @@ ${tasksMarkdown}`
 
           {/* Development Plan Tab */}
           <TabsContent value="plan" className="space-y-4">
-            <DevelopmentPlan 
-              personId={person.id} 
+            <DevelopmentPlan
+              personId={person.id}
               canManage={canManageCompetencies}
             />
           </TabsContent>
@@ -1653,8 +1659,8 @@ ${tasksMarkdown}`
                         </Label>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {useRealTimeTranscription 
-                          ? 'Speech will be transcribed live as you speak' 
+                        {useRealTimeTranscription
+                          ? 'Speech will be transcribed live as you speak'
                           : 'Audio will be transcribed after recording using OpenAI Whisper'
                         }
                       </p>
@@ -1665,9 +1671,8 @@ ${tasksMarkdown}`
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center space-x-3">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          isRecording ? 'bg-red-100' : 'bg-blue-100'
-                        }`}>
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isRecording ? 'bg-red-100' : 'bg-blue-100'
+                          }`}>
                           {isRecording ? (
                             <MicOff className="h-6 w-6 text-red-600" />
                           ) : (
@@ -1679,11 +1684,11 @@ ${tasksMarkdown}`
                             {isRecording ? 'Recording in progress...' : 'Ready to record'}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {isRecording ? 
-                              (useRealTimeTranscription && isLiveTranscribing ? 
-                                'Recording and transcribing live...' : 
+                            {isRecording ?
+                              (useRealTimeTranscription && isLiveTranscribing ?
+                                'Recording and transcribing live...' :
                                 'Click stop when finished'
-                              ) : 
+                              ) :
                               'Click record to start'
                             }
                           </p>
@@ -1743,7 +1748,7 @@ ${tasksMarkdown}`
                             )}
                           </div>
                         </div>
-                        
+
                         {/* Audio Player */}
                         <audio controls className="w-full">
                           <source src={URL.createObjectURL(audioBlob)} type="audio/webm" />
@@ -1801,7 +1806,7 @@ ${tasksMarkdown}`
                             {editingAnalysis ? 'View' : 'Edit'} Analysis
                           </Button>
                         </div>
-                        
+
                         {editingAnalysis ? (
                           <div className="space-y-2">
                             <Textarea
@@ -1829,13 +1834,13 @@ ${tasksMarkdown}`
                         <Label>Final Notes</Label>
                         <Textarea
                           value={newReviewForm.notes}
-                          onChange={(e) => setNewReviewForm(prev => ({...prev, notes: e.target.value}))}
+                          onChange={(e) => setNewReviewForm(prev => ({ ...prev, notes: e.target.value }))}
                           rows={8}
                           placeholder={analyzedData ? "Analyzed data will be formatted here..." : "Final review notes..."}
                           className={analyzedData ? "font-mono text-sm" : ""}
                         />
                         <p className="text-xs text-muted-foreground">
-                          {analyzedData 
+                          {analyzedData
                             ? "Markdown-formatted analysis from AI extraction. You can edit this before saving."
                             : "Enter your final review notes here, or use the 'Extract Notes' button above to analyze the transcription."
                           }
@@ -1891,8 +1896,8 @@ ${tasksMarkdown}`
                               </Badge>
                             </div>
                             <p className="text-sm text-muted-foreground mb-3">
-                              {review.notes.length > 150 
-                                ? review.notes.substring(0, 150) + '...' 
+                              {review.notes.length > 150
+                                ? review.notes.substring(0, 150) + '...'
                                 : review.notes
                               }
                             </p>
@@ -1933,21 +1938,23 @@ ${tasksMarkdown}`
 }
 
 interface AddCompetencyFormProps {
+  personId: string
   availableCompetencies: any[]
   existingCompetencies: any[]
-  onAdd: (competencyId: string, proficiency?: string) => void
+  onAdd: CompetencyHandler
   onCancel: () => void
   createCompetency: any
   canCreateCompetency: boolean
 }
 
-function AddCompetencyForm({ 
-  availableCompetencies, 
+function AddCompetencyForm({
+  personId,
+  availableCompetencies,
   existingCompetencies,
-  onAdd, 
-  onCancel, 
+  onAdd,
+  onCancel,
   createCompetency,
-  canCreateCompetency 
+  canCreateCompetency
 }: AddCompetencyFormProps) {
   const [selectedType, setSelectedType] = useState('')
   const [selectedCompetencyId, setSelectedCompetencyId] = useState('')
@@ -1957,7 +1964,7 @@ function AddCompetencyForm({
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [newCompetencyName, setNewCompetencyName] = useState('')
   const [newCompetencyDescription, setNewCompetencyDescription] = useState('')
-  
+
   const competencyTypes = [
     { value: 'KNOWLEDGE', label: 'Knowledge' },
     { value: 'SKILL', label: 'Skill' },
@@ -1967,61 +1974,65 @@ function AddCompetencyForm({
     { value: 'BEHAVIOUR', label: 'Behaviour' },
     { value: 'ENABLER', label: 'Enabler' },
   ].sort((a, b) => a.label.localeCompare(b.label))
-  
+
   // Filter competencies by type and exclude already assigned ones
   const filteredCompetencies = React.useMemo(() => {
     if (!availableCompetencies || availableCompetencies.length === 0) {
       return []
     }
-    
+
     let filtered = [...availableCompetencies]
-    
+
     // Filter by type if selected
     if (selectedType) {
       filtered = filtered.filter(comp => comp.type === selectedType)
     }
-    
+
     // Exclude already assigned competencies
-    filtered = filtered.filter(comp => 
+    filtered = filtered.filter(comp =>
       !existingCompetencies.some(existing => existing.id === comp.id)
     )
-    
+
     // Filter by search term if provided
     if (competencySearch.trim()) {
       const searchLower = competencySearch.toLowerCase()
-      filtered = filtered.filter(comp => 
+      filtered = filtered.filter(comp =>
         comp.name.toLowerCase().includes(searchLower) ||
         (comp.description && comp.description.toLowerCase().includes(searchLower))
       )
     }
-    
+
     // Sort alphabetically
     filtered.sort((a, b) => a.name.localeCompare(b.name))
-    
+
     // Limit to 10 if no search term
     if (!competencySearch.trim()) {
       filtered = filtered.slice(0, 10)
     }
-    
+
     return filtered
   }, [availableCompetencies, selectedType, existingCompetencies, competencySearch])
-  
+
   const selectedCompetency = availableCompetencies.find(c => c.id === selectedCompetencyId)
   const shouldShowProficiency = supportsProficiency((selectedCompetency?.type || selectedType) as any)
-  
+
   const handleCreateNew = async () => {
     if (!newCompetencyName.trim() || !selectedType) return
-    
+
     try {
       const newCompetency = await createCompetency.mutateAsync({
         type: selectedType as any,
         name: newCompetencyName.trim(),
         description: newCompetencyDescription.trim() || undefined
       })
-      
+
       // Add the newly created competency
-      await onAdd(newCompetency.id, shouldShowProficiency && proficiency ? proficiency : undefined)
-      
+      await onAdd({
+        competencyId: newCompetency.id,
+        proficiency: shouldShowProficiency && proficiency ? proficiency as Proficiency : undefined,
+        entityId: personId
+      })
+
       // Reset form
       setSelectedType('')
       setSelectedCompetencyId('')
@@ -2033,12 +2044,16 @@ function AddCompetencyForm({
       console.error('Failed to create competency:', error)
     }
   }
-  
+
   const handleSubmit = async () => {
     if (isCreatingNew) {
       await handleCreateNew()
     } else if (selectedCompetencyId) {
-      await onAdd(selectedCompetencyId, shouldShowProficiency && proficiency ? proficiency : undefined)
+      await onAdd({
+        competencyId: selectedCompetencyId,
+        proficiency: shouldShowProficiency && proficiency ? proficiency as Proficiency : undefined,
+        entityId: personId
+      })
       // Reset form
       setSelectedType('')
       setSelectedCompetencyId('')
@@ -2046,24 +2061,24 @@ function AddCompetencyForm({
       setCompetencySearch('')
     }
   }
-  
+
   const handleSelectCompetency = (competency: any) => {
     setSelectedCompetencyId(competency.id)
     setShowCompetencyList(false)
     setCompetencySearch('') // Clear search when selecting
   }
-  
-  const canSubmit = isCreatingNew ? 
-    (newCompetencyName.trim() && selectedType) : 
+
+  const canSubmit = isCreatingNew ?
+    (newCompetencyName.trim() && selectedType) :
     selectedCompetencyId
-  
+
   // Show competency list when type is selected and no competency is chosen
   useEffect(() => {
     if (selectedType && !selectedCompetencyId && !isCreatingNew) {
       setShowCompetencyList(true)
     }
   }, [selectedType, selectedCompetencyId, isCreatingNew])
-  
+
   return (
     <div className="space-y-4">
       {/* Type Selection */}
@@ -2089,7 +2104,7 @@ function AddCompetencyForm({
           </SelectContent>
         </Select>
       </div>
-      
+
       {selectedType && (
         <div className="space-y-2">
           <Label>Competency</Label>
@@ -2097,9 +2112,9 @@ function AddCompetencyForm({
             <div className="space-y-3 p-3 border rounded-md bg-muted/50">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Create New Competency</span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     setIsCreatingNew(false)
                     setNewCompetencyName('')
@@ -2109,7 +2124,7 @@ function AddCompetencyForm({
                   Cancel
                 </Button>
               </div>
-              
+
               <div className="space-y-2">
                 <Input
                   placeholder="Competency name"
@@ -2150,7 +2165,7 @@ function AddCompetencyForm({
                   readOnly={false}
                 />
               </div>
-              
+
               {showCompetencyList && (
                 <div className="absolute z-50 w-full">
                   <Card className="max-h-60 overflow-y-auto shadow-lg">
@@ -2176,7 +2191,7 @@ function AddCompetencyForm({
                               )}
                             </div>
                           ))}
-                          
+
                           {/* Show create option at the bottom */}
                           {canCreateCompetency && (
                             <div className="border-t pt-2 mt-2">
@@ -2192,7 +2207,7 @@ function AddCompetencyForm({
                                 }}
                               >
                                 <Plus className="h-4 w-4" />
-                                {competencySearch.trim() ? 
+                                {competencySearch.trim() ?
                                   `Create \"${competencySearch.trim()}\"` :
                                   'Create new competency'
                                 }
@@ -2203,7 +2218,7 @@ function AddCompetencyForm({
                       ) : (
                         <div className="p-4 text-center">
                           <p className="text-sm text-muted-foreground mb-3">
-                            {competencySearch.trim() ? 
+                            {competencySearch.trim() ?
                               `No competencies found matching \"${competencySearch}\"` :
                               'No available competencies of this type'
                             }
@@ -2228,11 +2243,11 @@ function AddCompetencyForm({
                   </Card>
                 </div>
               )}
-              
+
               {/* Click outside handler */}
               {showCompetencyList && (
-                <div 
-                  className="fixed inset-0 z-40" 
+                <div
+                  className="fixed inset-0 z-40"
                   onClick={() => setShowCompetencyList(false)}
                 />
               )}
@@ -2240,7 +2255,7 @@ function AddCompetencyForm({
           )}
         </div>
       )}
-      
+
       {shouldShowProficiency && (selectedCompetencyId || isCreatingNew) && (
         <div className="space-y-2">
           <Label>Proficiency Level</Label>
@@ -2257,10 +2272,10 @@ function AddCompetencyForm({
           </Select>
         </div>
       )}
-      
+
       <div className="flex gap-2 pt-4">
-        <Button 
-          onClick={handleSubmit} 
+        <Button
+          onClick={handleSubmit}
           disabled={!canSubmit || createCompetency.isPending}
         >
           {createCompetency.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -2283,11 +2298,11 @@ interface EditCompetencyFormProps {
 function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyFormProps) {
   const shouldShowProficiency = supportsProficiency(competency.type)
   const [proficiency, setProficiency] = useState(competency.proficiency || '')
-  
+
   const handleSubmit = () => {
     onSave(competency.id, shouldShowProficiency && proficiency ? proficiency : undefined)
   }
-  
+
   return (
     <div className="space-y-4">
       <div>
@@ -2304,7 +2319,7 @@ function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyForm
           )}
         </div>
       </div>
-      
+
       {shouldShowProficiency && (
         <div className="space-y-2">
           <Label>Proficiency Level</Label>
@@ -2321,8 +2336,8 @@ function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyForm
               </SelectContent>
             </Select>
             {proficiency && (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setProficiency('')}
                 title="Clear proficiency"
@@ -2333,7 +2348,7 @@ function EditCompetencyForm({ competency, onSave, onCancel }: EditCompetencyForm
           </div>
         </div>
       )}
-      
+
       <div className="flex gap-2 pt-4">
         <Button onClick={handleSubmit}>
           Save Changes

@@ -4,6 +4,7 @@ import { TRPCError } from '@trpc/server'
 import { supportsProficiency } from '../../utils/competency'
 import { Role } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { checkCreateCompetency } from './competencies'
 
 export const peopleRouter = router({
   // Create new person (PM only)
@@ -332,11 +333,11 @@ export const peopleRouter = router({
     const peopleWithCapacity = people.map(person => {
       const activeAllocations = person.projectAllocations
       const totalAllocatedCapacity = activeAllocations.reduce(
-        (sum, allocation) => sum + allocation.capacityAllocation, 
+        (sum, allocation) => sum + allocation.capacityAllocation,
         0
       )
       const capacityUtilization = person.capacity > 0 ? Math.round((totalAllocatedCapacity / person.capacity) * 100) : 0
-      
+
       return {
         ...person,
         totalAllocatedCapacity,
@@ -486,7 +487,7 @@ export const peopleRouter = router({
           // Calculate size
           const base64Data = input.photo.split(',')[1]
           const sizeInBytes = (base64Data.length * 3) / 4
-          
+
           if (sizeInBytes > 200 * 1024) { // 200KB limit
             throw new TRPCError({
               code: 'BAD_REQUEST',
@@ -548,11 +549,11 @@ export const peopleRouter = router({
         }),
         ...(Object.keys(userUpdates).length > 0
           ? [
-              ctx.db.user.update({
-                where: { id: userId },
-                data: userUpdates,
-              }),
-            ]
+            ctx.db.user.update({
+              where: { id: userId },
+              data: userUpdates,
+            }),
+          ]
           : []),
         // Create change log entry
         ctx.db.changeLog.create({
@@ -655,7 +656,7 @@ export const peopleRouter = router({
           // Calculate size
           const base64Data = updates.photo.split(',')[1]
           const sizeInBytes = (base64Data.length * 3) / 4
-          
+
           if (sizeInBytes > 200 * 1024) { // 200KB limit
             throw new TRPCError({
               code: 'BAD_REQUEST',
@@ -744,7 +745,10 @@ export const peopleRouter = router({
     .input(
       z.object({
         personId: z.string(),
+        name: z.string().optional(),
         competencyId: z.string(),
+        description: z.string().optional(),
+        type: z.enum(['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE', 'VALUE', 'BEHAVIOUR', 'ENABLER']).optional(),
         proficiency: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']).optional(),
       })
     )
@@ -766,24 +770,17 @@ export const peopleRouter = router({
       }
 
       // Verify competency exists and check if proficiency is applicable
-      const competency = await ctx.db.competency.findUnique({
-        where: { id: competencyId },
-      })
+      const competency = await checkCreateCompetency({
+        id: input.competencyId,
+        name: input.name,
+        description: input.description,
+        type: input.type,
+      }, ctx)
 
       if (!competency) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Competency not found',
-        })
-      }
-
-      // Only certain competencies should have proficiency
-      const shouldHaveProficiency = supportsProficiency(competency.type)
-      
-      if (proficiency && !shouldHaveProficiency) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Competency type ${competency.type} does not support proficiency levels`,
         })
       }
 
@@ -797,7 +794,7 @@ export const peopleRouter = router({
         },
       })
 
-      const finalProficiency = shouldHaveProficiency ? proficiency : null
+      const finalProficiency = proficiency;
 
       const result = await ctx.db.personCompetency.upsert({
         where: {

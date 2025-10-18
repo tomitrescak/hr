@@ -515,14 +515,16 @@ ${course.content || ''}
             canManage={canManage}
             iconColor="text-purple-600"
             buttonColor="bg-purple-600 hover:bg-purple-700"
-            onAddCompetency={async (competencyId: string, proficiency?: string) => {
+            onAddCompetency={async (competency) => {
               await addCompetencyMutation.mutateAsync({
-                courseId: id,
-                competencyId,
-                proficiency: proficiency as any,
+                courseId: competency.entityId,
+                competencyId: competency.competencyId,
+                proficiency: competency.proficiency,
+                description: competency.description,
+                name: competency.name,
+                type: competency.type
               })
             }}
-            createCompetency={createCompetencyMutation}
             allCompetencies={allCompetencies || []}
             existingCompetencies={course.competencies || []}
           />

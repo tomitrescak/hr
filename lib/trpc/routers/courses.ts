@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { router, protectedProcedure, pmProcedure } from '../trpc'
 import { TRPCError } from '@trpc/server'
+import { checkCreateCompetency } from './competencies'
 
 export const coursesRouter = router({
   // Get all courses (anyone can view)
@@ -1060,7 +1061,10 @@ export const coursesRouter = router({
     .input(
       z.object({
         courseId: z.string(),
+        name: z.string().optional(),
         competencyId: z.string(),
+        description: z.string().optional(),
+        type: z.enum(['SKILL', 'TECH_TOOL', 'ABILITY', 'KNOWLEDGE', 'VALUE', 'BEHAVIOUR', 'ENABLER']).optional(),
         proficiency: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']).optional(),
       })
     )
@@ -1078,23 +1082,19 @@ export const coursesRouter = router({
       }
 
       // Check if competency exists
-      const competency = await ctx.db.competency.findUnique({
-        where: { id: input.competencyId },
-      })
-
-      if (!competency) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Competency not found',
-        })
-      }
+      const competency = await checkCreateCompetency({
+        id: input.competencyId,
+        name: input.name,
+        description: input.description,
+        type: input.type,
+      }, ctx)
 
       // Check if already exists
       const existing = await ctx.db.courseCompetency.findUnique({
         where: {
           courseId_competencyId: {
             courseId: input.courseId,
-            competencyId: input.competencyId,
+            competencyId: competency.id,
           },
         },
       })
@@ -1109,7 +1109,7 @@ export const coursesRouter = router({
       const courseCompetency = await ctx.db.courseCompetency.create({
         data: {
           courseId: input.courseId,
-          competencyId: input.competencyId,
+          competencyId: competency.id,
           proficiency: input.proficiency,
         },
         include: {
