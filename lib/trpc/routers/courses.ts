@@ -38,6 +38,21 @@ export const coursesRouter = router({
               },
             },
           },
+          specialisationCourses: {
+            include: {
+              course: {
+                include: {
+                  competencies: {
+                    include: {
+                      competency: {
+                        select: { id: true, name: true, type: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
           _count: {
             select: {
               enrollments: true,
@@ -48,7 +63,39 @@ export const coursesRouter = router({
         orderBy: { name: 'asc' },
       })
 
-      return courses
+      // Calculate unique competency counts for specializations
+      const coursesWithCounts = courses.map(course => {
+        let competencyCount = course._count.competencies
+
+        // For specializations, count unique competencies across all related courses
+        if (course.type === 'SPECIALISATION' && course.specialisationCourses.length > 0) {
+          const uniqueCompetencyIds = new Set<string>()
+          
+          // Add direct competencies
+          course.competencies.forEach(cc => {
+            uniqueCompetencyIds.add(cc.competency.id)
+          })
+          
+          // Add competencies from related courses
+          course.specialisationCourses.forEach(sc => {
+            sc.course.competencies.forEach(cc => {
+              uniqueCompetencyIds.add(cc.competency.id)
+            })
+          })
+          
+          competencyCount = uniqueCompetencyIds.size
+        }
+
+        return {
+          ...course,
+          _count: {
+            ...course._count,
+            competencies: competencyCount,
+          },
+        }
+      })
+
+      return coursesWithCounts
     }),
 
   // Get course by ID
