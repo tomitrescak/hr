@@ -10,7 +10,6 @@ async function main() {
   console.log('Checking for required manager...')
   let pmUser = await prisma.user.findUnique({
     where: { email: 'ttrescak@deloitte.es' },
-    include: { person: true },
   })
 
   if (!pmUser) {
@@ -20,16 +19,8 @@ async function main() {
         name: 'Tomas Trescak',
         email: 'ttrescak@deloitte.es',
         passwordHash: await bcrypt.hash('deloitte123', 12),
-        role: 'PROJECT_MANAGER',
-        person: {
-          create: {
-            name: 'Tomas Trescak',
-            email: 'ttrescak@deloitte.es',
-            role: 'PROJECT_MANAGER',
-          },
-        },
-      },
-      include: { person: true },
+        role: 'PROJECT_MANAGER'
+      }
     })
     console.log('✅ Manager created successfully')
   } else {

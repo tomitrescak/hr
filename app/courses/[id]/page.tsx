@@ -78,11 +78,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     },
   })
 
-  const enrollMutation = trpc.courses.enroll.useMutation({
-    onSuccess: () => {
-      refetch()
-    },
-  })
+  const updateEnrollmentStatus = trpc.courses.updateEnrollmentStatus.useMutation();
 
   const handleDelete = async () => {
     if (!course) return
@@ -96,9 +92,13 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     }
   }
 
-  const handleEnroll = async () => {
+  const handleEnroll = async (status: 'WISHLIST' | 'IN_PROGRESS' | 'COMPLETED') => {
     try {
-      await enrollMutation.mutateAsync({ courseId: id })
+      await updateEnrollmentStatus.mutateAsync({
+        courseId: id,
+        personId: session?.user?.id as string,
+        status: status
+      })
       alert('Successfully enrolled in course!')
     } catch (error: any) {
       alert(error.message || 'Failed to enroll in course')
@@ -193,7 +193,13 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
           </div>
           <div className="flex space-x-2">
             {!isEnrolled && (
-              <Button onClick={handleEnroll} disabled={enrollMutation.isPending}>
+              <Button onClick={() => handleEnroll('WISHLIST')} disabled={updateEnrollmentStatus.isPending}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Wishlist
+              </Button>
+            )}
+            {!isEnrolled && (
+              <Button onClick={() => handleEnroll('IN_PROGRESS')} disabled={updateEnrollmentStatus.isPending}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Enroll
               </Button>

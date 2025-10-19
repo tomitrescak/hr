@@ -14,8 +14,8 @@ export const personReviewsRouter = router({
       // Check if user can access this person's reviews
       const canAccess = 
         ctx.session.user.role === 'PROJECT_MANAGER' ||
-        (ctx.session.user.id && await ctx.db.person.findFirst({
-          where: { id: input.personId, userId: ctx.session.user.id }
+        (ctx.session.user.id && await ctx.db.user.findFirst({
+          where: { id: ctx.session.user.id }
         }))
 
       if (!canAccess) {
@@ -52,10 +52,8 @@ export const personReviewsRouter = router({
     .mutation(async ({ ctx, input }) => {
       // Check if user can create reviews for this person
       const canCreate = 
-        ctx.session.user.role === 'PROJECT_MANAGER' ||
-        (ctx.session.user.id && await ctx.db.person.findFirst({
-          where: { id: input.personId, userId: ctx.session.user.id }
-        }))
+        ctx.session.user.role === 'PROJECT_MANAGER' && 
+        ctx.session.user.id 
 
       if (!canCreate) {
         throw new TRPCError({
@@ -106,8 +104,8 @@ export const personReviewsRouter = router({
       }
 
       const canUpdate = 
-        ctx.session.user.role === 'PROJECT_MANAGER' ||
-        (ctx.session.user.id && existingReview.person.userId === ctx.session.user.id)
+        ctx.session.user.role === 'PROJECT_MANAGER' && 
+        ctx.session.user.id 
 
       if (!canUpdate) {
         throw new TRPCError({
@@ -156,8 +154,8 @@ export const personReviewsRouter = router({
       }
 
       const canDelete = 
-        ctx.session.user.role === 'PROJECT_MANAGER' ||
-        (ctx.session.user.id && existingReview.person.userId === ctx.session.user.id)
+        ctx.session.user.role === 'PROJECT_MANAGER' && 
+        ctx.session.user.id 
 
       if (!canDelete) {
         throw new TRPCError({

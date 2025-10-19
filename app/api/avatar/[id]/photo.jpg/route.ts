@@ -9,7 +9,7 @@ export async function GET(
     const { id } = await context.params
 
     // Find person with photo
-    const person = await db.person.findUnique({
+    const person = await db.user.findUnique({
       where: { id },
       include: {
         photo: true

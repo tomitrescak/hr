@@ -48,16 +48,6 @@ export const authRouter = router({
           email: input.email,
           passwordHash,
           role: input.role,
-          person: {
-            create: {
-              name: input.name,
-              email: input.email,
-              role: input.role,
-            },
-          },
-        },
-        include: {
-          person: true,
         },
       })
 
@@ -65,7 +55,7 @@ export const authRouter = router({
       await ctx.db.changeLog.create({
         data: {
           entity: 'PERSON',
-          entityId: user.person!.id,
+          entityId: user!.id,
           field: 'created',
           toValue: { name: input.name, email: input.email, role: input.role },
           state: 'CREATED',
@@ -84,17 +74,6 @@ export const authRouter = router({
   me: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUnique({
       where: { id: ctx.session.user.id },
-      include: {
-        person: {
-          include: {
-            competencies: {
-              include: {
-                competency: true,
-              },
-            },
-          },
-        },
-      },
     })
 
     if (!user) {

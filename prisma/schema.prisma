@@ -16,18 +16,7 @@ model User {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   changeLogs   ChangeLog[]
-  person       Person?
-
-  @@map("users")
-}
-
-model Person {
-  id                 String              @id @default(uuid())
-  userId             String              @unique
-  name               String
-  email              String              @unique
   alternativeEmail   String?
-  role               Role
   entryDate          DateTime            @default(now())
   isActive           Boolean             @default(true)
   deactivatedAt      DateTime?
@@ -36,14 +25,37 @@ model Person {
   photoId            String?
   courseEnrollments  CourseEnrollment[]
   photo              Image?              @relation(fields: [photoId], references: [id])
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   competencies       PersonCompetency[]
   oneOnOneReviews    PersonReview[]      @relation("PersonOneOnOneReviews")
   projectAllocations ProjectAllocation[]
   taskAssignments    Task[]
 
-  @@map("people")
+  @@map("users")
 }
+
+// model Person {
+//   id                 String              @id @default(uuid())
+//   userId             String              @unique
+//   name               String
+//   email              String              @unique
+//   alternativeEmail   String?
+//   role               Role
+//   entryDate          DateTime            @default(now())
+//   isActive           Boolean             @default(true)
+//   deactivatedAt      DateTime?
+//   cv                 String?
+//   capacity           Int                 @default(100)
+//   photoId            String?
+//   courseEnrollments  CourseEnrollment[]
+//   photo              Image?              @relation(fields: [photoId], references: [id])
+//   // user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+//   competencies       PersonCompetency[]
+//   oneOnOneReviews    PersonReview[]      @relation("PersonOneOnOneReviews")
+//   projectAllocations ProjectAllocation[]
+//   taskAssignments    Task[]
+
+//   @@map("people")
+// }
 
 model Competency {
   id                 String               @id @default(uuid())
@@ -79,7 +91,7 @@ model PersonCompetency {
   proficiency   Proficiency?
   lastUpdatedAt DateTime     @default(now())
   competency    Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  person        Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  person        User       @relation(fields: [personId], references: [id], onDelete: Cascade)
 
   @@unique([personId, competencyId])
   @@map("person_competencies")
@@ -139,7 +151,7 @@ model CourseEnrollment {
   startedAt   DateTime?
   completedAt DateTime?
   course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  person      Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  person      User           @relation(fields: [personId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, personId])
   @@map("course_enrollments")
@@ -201,7 +213,7 @@ model ProjectAllocation {
   capacityAllocation Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  person             Person?  @relation(fields: [personId], references: [id])
+  person             User?  @relation(fields: [personId], references: [id])
   project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("project_allocations")
@@ -219,7 +231,7 @@ model Task {
   dueDate     DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  assignee    Person?   @relation(fields: [assigneeId], references: [id])
+  assignee    User?   @relation(fields: [assigneeId], references: [id])
   okr         OKR?      @relation(fields: [okrId], references: [id])
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -233,7 +245,7 @@ model PersonReview {
   notes         String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  person        Person   @relation("PersonOneOnOneReviews", fields: [personId], references: [id], onDelete: Cascade)
+  person        User   @relation("PersonOneOnOneReviews", fields: [personId], references: [id], onDelete: Cascade)
 
   @@map("person_reviews")
 }
@@ -262,7 +274,7 @@ model Image {
   size      Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  persons   Person[]
+  persons   User[]
 
   @@map("images")
 }

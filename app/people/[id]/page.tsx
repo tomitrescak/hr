@@ -379,7 +379,7 @@ export default function PersonPage({ params }: PersonPageProps) {
 
   // Check if current user can manage this person's competencies
   const canManageCompetencies = !!(session?.user?.role === 'PROJECT_MANAGER' ||
-    (session?.user?.id && person?.userId === session.user.id))
+    (session?.user?.id && person?.id === session.user.id))
 
   // Real-time speech recognition setup
   React.useEffect(() => {

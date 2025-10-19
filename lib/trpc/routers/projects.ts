@@ -491,8 +491,8 @@ export const projectsRouter = router({
 
       // Check permissions - PMs can edit anything, users can only edit tasks assigned to them
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || current.assigneeId !== userPerson.id) {
@@ -565,7 +565,7 @@ export const projectsRouter = router({
     .mutation(async ({ ctx, input }) => {
       // Validate capacity allocation if person is assigned
       if (input.personId && input.capacityAllocation > 0) {
-        const person = await ctx.db.person.findUnique({
+        const person = await ctx.db.user.findUnique({
           where: { id: input.personId },
           include: {
             projectAllocations: {
@@ -644,7 +644,7 @@ export const projectsRouter = router({
 
       // Validate capacity if updating allocation
       if (updates.capacityAllocation !== undefined && updates.personId) {
-        const person = await ctx.db.person.findUnique({
+        const person = await ctx.db.user.findUnique({
           where: { id: updates.personId },
           include: {
             projectAllocations: {
@@ -762,7 +762,7 @@ export const projectsRouter = router({
 
   // Get all people for assignments
   getPeople: protectedProcedure.query(async ({ ctx }) => {
-    const people = await ctx.db.person.findMany({
+    const people = await ctx.db.user.findMany({
       select: {
         id: true,
         name: true,
@@ -798,8 +798,8 @@ export const projectsRouter = router({
 
       // Check permissions - PMs can move anything, users can only move their tasks
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || current.assigneeId !== userPerson.id) {

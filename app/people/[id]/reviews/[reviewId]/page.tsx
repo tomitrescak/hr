@@ -46,7 +46,7 @@ export default function ReviewPage({ params }: ReviewPageProps) {
 
   // Check permissions
   const canManage = session?.user?.role === 'PROJECT_MANAGER' || 
-    (session?.user?.id && person?.userId === session.user.id)
+    (session?.user?.id && person?.id === session.user.id)
 
   // Initialize edit form when review is loaded
   useEffect(() => {

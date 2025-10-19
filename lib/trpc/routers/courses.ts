@@ -13,7 +13,7 @@ export const coursesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const where: any = {}
-      
+
       if (input?.search) {
         where.OR = [
           { name: { contains: input.search, mode: 'insensitive' } },
@@ -70,19 +70,19 @@ export const coursesRouter = router({
         // For specializations, count unique competencies across all related courses
         if (course.type === 'SPECIALISATION' && course.specialisationCourses.length > 0) {
           const uniqueCompetencyIds = new Set<string>()
-          
+
           // Add direct competencies
           course.competencies.forEach(cc => {
             uniqueCompetencyIds.add(cc.competency.id)
           })
-          
+
           // Add competencies from related courses
           course.specialisationCourses.forEach(sc => {
             sc.course.competencies.forEach(cc => {
               uniqueCompetencyIds.add(cc.competency.id)
             })
           })
-          
+
           competencyCount = uniqueCompetencyIds.size
         }
 
@@ -164,7 +164,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { competencyIds, specialisationCourses, url, ...courseData } = input
-      
+
       // Clean up URL - convert empty string to null
       const cleanUrl = url && url.trim() !== '' ? url : null
 
@@ -194,7 +194,7 @@ export const coursesRouter = router({
           })
         }
       }
-      
+
       // For specialisations, validate that selected courses exist and are of type COURSE
       if (input.type === 'SPECIALISATION' && specialisationCourses.length > 0) {
         const courses = await ctx.db.course.findMany({
@@ -289,7 +289,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, competencyIds, specialisationCourses, url, ...updates } = input
-      
+
       // Clean up URL - convert empty string to null
       const cleanUrl = url !== undefined ? (url && url.trim() !== '' ? url : null) : undefined
 
@@ -343,7 +343,7 @@ export const coursesRouter = router({
           })
         }
       }
-      
+
       // For specialisations, validate that selected courses exist and are of type COURSE
       if (specialisationCourses) {
         const courses = await ctx.db.course.findMany({
@@ -479,7 +479,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if person can enroll others (PM only)
       if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
@@ -549,7 +549,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if person can update others' progress (PM only)
       if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
@@ -668,7 +668,7 @@ export const coursesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if user can view others' plans (PM only)
       if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
@@ -716,7 +716,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if user can manage others' plans (PM only)
       if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
@@ -786,16 +786,16 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if user can manage others' plans (PM only)
-      if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
+      if (input.personId && ctx.session.user?.id !== input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Only Project Managers can manage others\' development plans',
         })
       }
 
-      const enrollment = await ctx.db.courseEnrollment.findUnique({
+      let enrollment = await ctx.db.courseEnrollment.findUnique({
         where: {
           courseId_personId: {
             courseId: input.courseId,
@@ -816,9 +816,24 @@ export const coursesRouter = router({
       })
 
       if (!enrollment) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Course enrollment not found',
+        enrollment = await ctx.db.courseEnrollment.create({
+          data: {
+            courseId: input.courseId,
+            personId,
+            status: input.status,
+            enrolledAt: new Date(),
+          },
+          include: {
+            course: {
+              include: {
+                competencies: {
+                  include: {
+                    competency: true,
+                  },
+                },
+              },
+            },
+          },
         })
       }
 
@@ -830,7 +845,7 @@ export const coursesRouter = router({
       if (input.status === 'IN_PROGRESS' && enrollment.status !== 'IN_PROGRESS') {
         updates.startedAt = new Date()
       }
-      
+
       if (input.status === 'COMPLETED' && enrollment.status !== 'COMPLETED') {
         updates.completedAt = new Date()
         updates.completed = true
@@ -862,12 +877,12 @@ export const coursesRouter = router({
       if (input.status === 'COMPLETED' && enrollment.status !== 'COMPLETED') {
         console.log(`Adding competencies for completed course: ${enrollment.course.id} to person: ${personId}`)
         console.log(`Course has ${enrollment.course.competencies.length} competencies`)
-        
+
         for (const courseComp of enrollment.course.competencies) {
           const competency = courseComp.competency
-          
+
           console.log(`Processing competency: ${competency.name} (${competency.type})`)
-          
+
           // Check if person already has this competency
           const existingPersonComp = await ctx.db.personCompetency.findUnique({
             where: {
@@ -883,13 +898,13 @@ export const coursesRouter = router({
           if (!targetProficiency) {
             // Determine proficiency level for new competencies
             const defaultProficiency = {
-              'SKILL': 'INTERMEDIATE',
-              'TECH_TOOL': 'INTERMEDIATE', 
-              'ABILITY': 'INTERMEDIATE',
-              'KNOWLEDGE': 'INTERMEDIATE',
-              'VALUE': 'INTERMEDIATE',
-              'BEHAVIOUR': 'INTERMEDIATE',
-              'ENABLER': 'INTERMEDIATE',
+              'SKILL': 'BEGGINNER',
+              'TECH_TOOL': 'BEGGINNER',
+              'ABILITY': 'BEGGINNER',
+              'KNOWLEDGE': 'BEGGINNER',
+              'VALUE': 'BEGGINNER',
+              'BEHAVIOUR': 'BEGGINNER',
+              'ENABLER': 'BEGGINNER',
             }[competency.type] as any
             targetProficiency = defaultProficiency
           }
@@ -910,9 +925,9 @@ export const coursesRouter = router({
             const proficiencyLevels = { 'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4 }
             const currentLevel = proficiencyLevels[existingPersonComp.proficiency as keyof typeof proficiencyLevels] || 0
             const newLevel = proficiencyLevels[targetProficiency as keyof typeof proficiencyLevels] || 0
-            
+
             console.log(`Existing competency: ${competency.name}, current: ${existingPersonComp.proficiency} (${currentLevel}), target: ${targetProficiency} (${newLevel})`)
-            
+
             if (newLevel > currentLevel) {
               console.log(`Updating competency: ${competency.name} from ${existingPersonComp.proficiency} to ${targetProficiency}`)
               await ctx.db.personCompetency.update({
@@ -953,7 +968,7 @@ export const coursesRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const personId = input.personId || ctx.session.user.id
-      
+
       // Check if user can manage others' plans (PM only)
       if (input.personId && ctx.session.user.role !== 'PROJECT_MANAGER') {
         throw new TRPCError({
@@ -1025,12 +1040,12 @@ export const coursesRouter = router({
       if (updates.completed && wasNotCompleted) {
         console.log(`Auto-completed course via progress 100% - adding competencies for course: ${enrollment.course.id} to person: ${personId}`)
         console.log(`Course has ${enrollment.course.competencies.length} competencies`)
-        
+
         for (const courseComp of enrollment.course.competencies) {
           const competency = courseComp.competency
-          
+
           console.log(`Processing competency: ${competency.name} (${competency.type})`)
-          
+
           // Check if person already has this competency
           const existingPersonComp = await ctx.db.personCompetency.findUnique({
             where: {
@@ -1047,7 +1062,7 @@ export const coursesRouter = router({
             // Determine proficiency level for new competencies
             const defaultProficiency = {
               'SKILL': 'INTERMEDIATE',
-              'TECH_TOOL': 'INTERMEDIATE', 
+              'TECH_TOOL': 'INTERMEDIATE',
               'ABILITY': 'INTERMEDIATE',
               'KNOWLEDGE': 'INTERMEDIATE',
               'VALUE': 'INTERMEDIATE',
@@ -1073,9 +1088,9 @@ export const coursesRouter = router({
             const proficiencyLevels = { 'BEGINNER': 1, 'INTERMEDIATE': 2, 'ADVANCED': 3, 'EXPERT': 4 }
             const currentLevel = proficiencyLevels[existingPersonComp.proficiency as keyof typeof proficiencyLevels] || 0
             const newLevel = proficiencyLevels[targetProficiency as keyof typeof proficiencyLevels] || 0
-            
+
             console.log(`Existing competency: ${competency.name}, current: ${existingPersonComp.proficiency} (${currentLevel}), target: ${targetProficiency} (${newLevel})`)
-            
+
             if (newLevel > currentLevel) {
               console.log(`Updating competency: ${competency.name} from ${existingPersonComp.proficiency} to ${targetProficiency}`)
               await ctx.db.personCompetency.update({
@@ -1321,7 +1336,7 @@ export const coursesRouter = router({
           if (existing) {
             existing.occurrenceCount += 1
             existing.courseNames.push(specCourse.course.name)
-            
+
             if (courseComp.proficiency) {
               existing.proficiencies.push(courseComp.proficiency)
             }

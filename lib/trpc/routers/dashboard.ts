@@ -5,7 +5,7 @@ export const dashboardRouter = router({
   // Get dashboard statistics
   getStats: protectedProcedure.query(async ({ ctx }) => {
     // Get people count
-    const peopleCount = await ctx.db.person.count()
+    const peopleCount = await ctx.db.user.count()
 
     // Get projects count
     const projectsCount = await ctx.db.project.count()

@@ -45,31 +45,12 @@ export const peopleRouter = router({
             passwordHash,
             name: input.name,
             role: input.role as Role,
-          },
-        })
-
-        const person = await tx.person.create({
-          data: {
-            userId: user.id,
-            name: input.name,
-            email: input.email,
-            role: input.role as Role,
             entryDate,
             capacity: input.capacity,
           },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-                createdAt: true,
-              },
-            },
-          },
         })
 
-        return person
+        return user
       })
 
       // Create change log entry
@@ -105,9 +86,8 @@ export const peopleRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, alternativeEmail, reason } = input
 
-      const currentPerson = await ctx.db.person.findUnique({
-        where: { id },
-        include: { user: true },
+      const currentPerson = await ctx.db.user.findUnique({
+        where: { id }
       })
 
       if (!currentPerson) {
@@ -126,22 +106,13 @@ export const peopleRouter = router({
 
       // Update person record in a transaction
       const [updatedPerson] = await ctx.db.$transaction([
-        ctx.db.person.update({
+        ctx.db.user.update({
           where: { id },
           data: {
             isActive: false,
             deactivatedAt: new Date(),
             alternativeEmail: alternativeEmail || undefined,
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
+          }
         }),
         // Create change log entry
         ctx.db.changeLog.create({
@@ -175,9 +146,8 @@ export const peopleRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id } = input
 
-      const currentPerson = await ctx.db.person.findUnique({
-        where: { id },
-        include: { user: true },
+      const currentPerson = await ctx.db.user.findUnique({
+        where: { id }
       })
 
       if (!currentPerson) {
@@ -196,21 +166,12 @@ export const peopleRouter = router({
 
       // Update person record in a transaction
       const [updatedPerson] = await ctx.db.$transaction([
-        ctx.db.person.update({
+        ctx.db.user.update({
           where: { id },
           data: {
             isActive: true,
             deactivatedAt: null,
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
+          }
         }),
         // Create change log entry
         ctx.db.changeLog.create({
@@ -240,9 +201,8 @@ export const peopleRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, confirmEmail } = input
 
-      const currentPerson = await ctx.db.person.findUnique({
-        where: { id },
-        include: { user: true },
+      const currentPerson = await ctx.db.user.findUnique({
+        where: { id }
       })
 
       if (!currentPerson) {
@@ -261,7 +221,7 @@ export const peopleRouter = router({
       }
 
       // Prevent deletion of the current user
-      if (currentPerson.userId === ctx.session.user.id) {
+      if (currentPerson.id === ctx.session.user.id) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Cannot delete your own account',
@@ -287,7 +247,7 @@ export const peopleRouter = router({
 
       // Delete the user (this will cascade to person due to schema constraint)
       await ctx.db.user.delete({
-        where: { id: currentPerson.userId },
+        where: { id: currentPerson.id },
       })
 
       return { success: true, deleted: currentPerson }
@@ -295,16 +255,8 @@ export const peopleRouter = router({
 
   // Get all people (anyone can view)
   list: protectedProcedure.query(async ({ ctx }) => {
-    const people = await ctx.db.person.findMany({
+    const people = await ctx.db.user.findMany({
       include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            createdAt: true,
-          },
-        },
         photo: true,
         competencies: {
           include: {
@@ -353,18 +305,9 @@ export const peopleRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const person = await ctx.db.person.findUnique({
+      const person = await ctx.db.user.findUnique({
         where: { id: input.id },
         include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              role: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
           competencies: {
             include: {
               competency: true,
@@ -427,27 +370,26 @@ export const peopleRouter = router({
 
       // Get current user's person record
       const currentUser = await ctx.db.user.findUnique({
-        where: { id: userId },
-        include: { person: true },
+        where: { id: userId }
       })
 
-      if (!currentUser?.person) {
+      if (!currentUser) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Person record not found',
         })
       }
 
-      const personId = currentUser.person.id
+      const personId = currentUser.id
       const updates: any = {}
       const userUpdates: any = {}
 
-      if (input.name && input.name !== currentUser.person.name) {
+      if (input.name && input.name !== currentUser.name) {
         updates.name = input.name
         userUpdates.name = input.name
       }
 
-      if (input.email && input.email !== currentUser.person.email) {
+      if (input.email && input.email !== currentUser.email) {
         // Check if email is already taken
         const existingUser = await ctx.db.user.findUnique({
           where: { email: input.email },
@@ -464,16 +406,16 @@ export const peopleRouter = router({
         userUpdates.email = input.email
       }
 
-      if (input.entryDate && new Date(input.entryDate).getTime() !== currentUser.person.entryDate.getTime()) {
+      if (input.entryDate && new Date(input.entryDate).getTime() !== currentUser.entryDate.getTime()) {
         updates.entryDate = new Date(input.entryDate)
       }
 
-      if (input.cv !== undefined && input.cv !== currentUser.person.cv) {
+      if (input.cv !== undefined && input.cv !== currentUser.cv) {
         updates.cv = input.cv
       }
 
       // Handle photo upload
-      let photoId = currentUser.person.photoId
+      let photoId = currentUser.photoId
       if (input.photo !== undefined) {
         if (input.photo) {
           // Validate photo data (should be base64 encoded JPEG)
@@ -523,22 +465,15 @@ export const peopleRouter = router({
       }
 
       if (Object.keys(updates).length === 0) {
-        return currentUser.person
+        return currentUser
       }
 
       // Update both user and person records in a transaction
       const [updatedPerson] = await ctx.db.$transaction([
-        ctx.db.person.update({
+        ctx.db.user.update({
           where: { id: personId },
           data: updates,
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-              },
-            },
             photo: true,
             competencies: {
               include: {
@@ -562,7 +497,7 @@ export const peopleRouter = router({
             entityId: personId,
             field: Object.keys(updates).join(', '),
             fromValue: Object.keys(updates).reduce((acc, key) => {
-              acc[key] = currentUser.person![key as keyof typeof currentUser.person]
+              acc[key] = currentUser![key as keyof typeof currentUser]
               return acc
             }, {} as any),
             toValue: updates,
@@ -591,9 +526,8 @@ export const peopleRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input
 
-      const currentPerson = await ctx.db.person.findUnique({
-        where: { id },
-        include: { user: true },
+      const currentPerson = await ctx.db.user.findUnique({
+        where: { id }
       })
 
       if (!currentPerson) {
@@ -617,7 +551,7 @@ export const peopleRouter = router({
           where: { email: updates.email },
         })
 
-        if (existingUser && existingUser.id !== currentPerson.userId) {
+        if (existingUser && existingUser.id !== currentPerson.id) {
           throw new TRPCError({
             code: 'CONFLICT',
             message: 'Email already in use',
@@ -697,17 +631,10 @@ export const peopleRouter = router({
 
       // Update both person and user records in a transaction
       const [updatedPerson] = await ctx.db.$transaction([
-        ctx.db.person.update({
+        ctx.db.user.update({
           where: { id },
           data: personUpdates,
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-              },
-            },
             photo: true,
             competencies: {
               include: {
@@ -717,7 +644,7 @@ export const peopleRouter = router({
           },
         }),
         ctx.db.user.update({
-          where: { id: currentPerson.userId },
+          where: { id: currentPerson.id },
           data: userUpdates,
         }),
         // Create change log entry
@@ -757,8 +684,8 @@ export const peopleRouter = router({
 
       // Check if user can modify this person's competencies
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || userPerson.id !== personId) {
@@ -851,8 +778,8 @@ export const peopleRouter = router({
 
       // Check if user can modify this person's competencies
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || userPerson.id !== personId) {
@@ -902,8 +829,8 @@ export const peopleRouter = router({
     .query(async ({ ctx, input }) => {
       // Check if user can view this person's history
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || userPerson.id !== input.personId) {
@@ -952,7 +879,7 @@ export const peopleRouter = router({
       const { competencyIds, minMatchPercentage } = input
 
       // Get all people with their competencies
-      const peopleWithCompetencies = await ctx.db.person.findMany({
+      const peopleWithCompetencies = await ctx.db.user.findMany({
         include: {
           competencies: {
             include: {
@@ -1009,8 +936,8 @@ export const peopleRouter = router({
     .query(async ({ ctx, input }) => {
       // Check if user can view this person's tasks
       if (ctx.session.user.role !== 'PROJECT_MANAGER') {
-        const userPerson = await ctx.db.person.findUnique({
-          where: { userId: ctx.session.user.id },
+        const userPerson = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
         })
 
         if (!userPerson || userPerson.id !== input.personId) {
