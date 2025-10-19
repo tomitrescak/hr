@@ -31,6 +31,7 @@ import { AppLayout } from '@/components/layout/app-layout'
 import { CourseCompetencyManager } from '@/components/courses/CourseCompetencyManager'
 import { SpecializationCompetencySummary } from '@/components/courses/SpecializationCompetencySummary'
 import { marked } from 'marked'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 
 const competencyTypeColors = {
@@ -78,7 +79,11 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     },
   })
 
-  const updateEnrollmentStatus = trpc.courses.updateEnrollmentStatus.useMutation();
+  const updateEnrollmentStatus = trpc.courses.updateEnrollmentStatus.useMutation({
+    onSuccess: () => {
+      refetch()
+    }
+  });
 
   const handleDelete = async () => {
     if (!course) return
@@ -106,7 +111,8 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
   }
 
   const canManage = session?.user?.role === 'PROJECT_MANAGER'
-  const isEnrolled = course?.enrollments.some(e => e.person.id === session?.user?.id)
+  const enrollmentStatus =  course?.enrollments.find(e => e.person.id === session?.user?.id)?.status || 'NOT_ENROLLED';
+
 
   const handleCompetencyClick = (competencyId: string) => {
     router.push(`/competencies/${competencyId}`)
@@ -192,17 +198,34 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
             </div>
           </div>
           <div className="flex space-x-2">
-            {!isEnrolled && (
-              <Button onClick={() => handleEnroll('WISHLIST')} disabled={updateEnrollmentStatus.isPending}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Wishlist
-              </Button>
-            )}
-            {!isEnrolled && (
-              <Button onClick={() => handleEnroll('IN_PROGRESS')} disabled={updateEnrollmentStatus.isPending}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Enroll
-              </Button>
+            {session?.user && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <Select
+                  value={enrollmentStatus}
+                  onValueChange={(value) => {
+                    if (value == '') {
+                      return
+                    }
+                    if (value !== 'NOT_ENROLLED') {
+                      handleEnroll(value as 'WISHLIST' | 'IN_PROGRESS' | 'COMPLETED')
+                      
+                      // setEnrollmentStatus(value as 'NOT_ENROLLED' | 'WISHLIST' | 'IN_PROGRESS' | 'COMPLETED')
+                    }
+                  }}
+                  disabled={updateEnrollmentStatus.isPending}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NOT_ENROLLED">Not Enrolled</SelectItem>
+                    <SelectItem value="WISHLIST">Wishlist</SelectItem>
+                    <SelectItem value="IN_PROGRESS">Enrolled</SelectItem>
+                    <SelectItem value="COMPLETED">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
             {canManage && (
               <>
