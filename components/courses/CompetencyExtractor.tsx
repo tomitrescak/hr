@@ -191,6 +191,9 @@ export function CompetencyExtractor({
     const selectedCompetencyId = selectedCompetencies[competency.reactId]
     if (!state || state.action !== 'pending' || !selectedCompetencyId) return
 
+    // Get the current/updated competency from state (in case it was edited)
+    const currentCompetency = extractedCompetencies.find(c => c.reactId === competency.reactId) || competency
+
     // Update state to show loading
     setCompetencyStates(prev => ({
       ...prev,
@@ -210,12 +213,12 @@ export function CompetencyExtractor({
       }
 
       if (isNewCompetency(selectedCompetencyId)) {
-        // Create new competency first - use the current competency data
+        // Create new competency first - use the current/updated competency data
         await onAddCompetency({
           entityId: entityId,
-          name: competency.name,
-          description: competency.description,
-          type: competency.type,
+          name: currentCompetency.name,
+          description: currentCompetency.description,
+          type: currentCompetency.type,
           competencyId: selectedCompetencyId, // Indicate new competency creation
           proficiency: state.proficiency,
         })

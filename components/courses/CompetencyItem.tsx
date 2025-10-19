@@ -120,10 +120,10 @@ export function CompetencyItem({
                               <div className="flex items-center gap-2">
                                 <span className={`text-sm font-medium ${isAlreadyAdded ? 'text-green-900' : 'text-gray-900'
                                   }`}>
-                                  {option.name}
+                                  {isMainCompetency && isSelected ? competency.name : option.name}
                                 </span>
-                                <Badge className={getCompetencyTypeColor(option.type)} variant="outline">
-                                  {option.type.replace('_', ' ')}
+                                <Badge className={getCompetencyTypeColor(isMainCompetency && isSelected ? competency.type : option.type)} variant="outline">
+                                  {(isMainCompetency && isSelected ? competency.type : option.type).replace('_', ' ')}
                                 </Badge>
 
                                 {isMainCompetency ? (
@@ -170,10 +170,10 @@ export function CompetencyItem({
                                 </Button>
                               )}
                             </div>
-                            {option.description && (
+                            {(isMainCompetency && isSelected ? competency.description : option.description) && (
                               <p className={`text-xs overflow-hidden text-ellipsis ${isAlreadyAdded ? 'text-green-700' : 'text-gray-600'
                                 }`} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                {option.description}
+                                {isMainCompetency && isSelected ? competency.description : option.description}
                               </p>
                             )}
 
