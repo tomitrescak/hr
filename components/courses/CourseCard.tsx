@@ -90,11 +90,11 @@ export function CourseCard({ enrollment, isDragging = false, onEditDates }: Cour
                 {enrollment.course.name}
               </Link>
             </CardTitle>
-            {enrollment.course.description && (
+            {/* {enrollment.course.description && (
               <CardDescription className="mt-1 line-clamp-2">
                 {processCourseDescription(enrollment.course.description, 150)}
               </CardDescription>
-            )}
+            )} */}
           </div>
           {onEditDates && (
             <Button
@@ -114,14 +114,26 @@ export function CourseCard({ enrollment, isDragging = false, onEditDates }: Cour
       
       <CardContent className="space-y-3">
         {/* Status Badge */}
-        <div className="flex items-center justify-between">
-          <Badge variant="outline" className={
-            enrollment.status === "COMPLETED" ? "bg-green-100 text-green-800" :
-            enrollment.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-800" :
-            "bg-gray-100 text-gray-800"
-          }>
-            {enrollment.status.replace("_", " ")}
-          </Badge>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          {enrollment.status === "IN_PROGRESS" && (
+            <div className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              Started: {formatDate(enrollment.startedAt)}
+            </div>
+          )}
+          {enrollment.status === "COMPLETED" && (
+            <div className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              Completed: {formatDate(enrollment.completedAt)}
+            </div>
+          )}
+          {enrollment.status === "WISHLIST" && (
+            <div className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              Added: {formatDate(enrollment.enrolledAt)}
+            </div>
+          )}
+          
           
           {enrollment.course.duration && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -147,27 +159,7 @@ export function CourseCard({ enrollment, isDragging = false, onEditDates }: Cour
           </div>
         )}
 
-        {/* Dates */}
-        <div className="space-y-1 text-xs text-muted-foreground">
-          {enrollment.status === "IN_PROGRESS" && (
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Started: {formatDate(enrollment.startedAt)}
-            </div>
-          )}
-          {enrollment.status === "COMPLETED" && (
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Completed: {formatDate(enrollment.completedAt)}
-            </div>
-          )}
-          {enrollment.status === "WISHLIST" && (
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              Added: {formatDate(enrollment.enrolledAt)}
-            </div>
-          )}
-        </div>
+
 
       </CardContent>
     </Card>

@@ -60,8 +60,6 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
   const { id } = use(params)
   const { data: session } = useSession()
   const router = useRouter()
-  const [descriptionLength, setDescriptionLength] = useState(0)
-  const [courseType, setCourseType] = useState<'COURSE' | 'SPECIALISATION'>('COURSE')
   const [selectedSpecialisationCourses, setSelectedSpecialisationCourses] = useState<string[]>([])
 
   const {
@@ -79,9 +77,11 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
     control,
     reset,
     setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<CourseFormData>({
     resolver: zodResolver(courseSchema),
+    mode: 'onChange',
     defaultValues: {
       name: '',
       description: '',
@@ -92,35 +92,27 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
     },
   })
 
+  // Watch the type field to get the current form value
+  const formType = watch('type')
+
   // Update form when course data loads
   useEffect(() => {
     if (course) {
+      const courseType = course.type || 'COURSE'
       reset({
         name: course.name,
         description: course.description || '',
         content: course.content || '',
         url: course.url || '',
-        type: course.type || 'COURSE',
+        type: courseType,
         duration: course.duration?.toString() || '',
       })
       // Update state variables
-      const processedLength = removeMarkdown(course.description || '').length
-      setDescriptionLength(processedLength)
-      setCourseType(course.type || 'COURSE')
       setSelectedSpecialisationCourses(
         course.specialisationCourses?.map(sc => sc.courseId) || []
       )
     }
   }, [course, reset])
-
-  const updateMutation = trpc.courses.update.useMutation({
-    onSuccess: () => {
-      refetch()
-    },
-    onError: (error) => {
-      alert(error.message || 'Failed to update course')
-    },
-  })
 
   const updateMutationWithRedirect = trpc.courses.update.useMutation({
     onSuccess: () => {
@@ -192,7 +184,7 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
         url: data.url,
         type: data.type,
         duration: data.duration ? parseInt(data.duration, 10) : undefined,
-        specialisationCourses: courseType === 'SPECIALISATION' ? selectedSpecialisationCourses : [],
+        specialisationCourses: data.type === 'SPECIALISATION' ? selectedSpecialisationCourses : [],
       })
     } catch (error) {
       console.error('Failed to update course:', error)
@@ -333,22 +325,28 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
               {/* Course Type */}
               <div className="space-y-2">
                 <Label htmlFor="type">Course Type</Label>
-                <Select
-                  value={courseType}
-                  onValueChange={(value: 'COURSE' | 'SPECIALISATION') => {
-                    setCourseType(value)
-                    setValue('type', value)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select course type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="COURSE">Course</SelectItem>
-                    <SelectItem value="SPECIALISATION">Specialisation</SelectItem>
-                  </SelectContent>
-                </Select>
-                
+                <Controller
+                  name="type"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value || 'COURSE'}
+                      onValueChange={(value: 'COURSE' | 'SPECIALISATION' | "") => {
+                        if (value !== "") {
+                          field.onChange(value)
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select course type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="COURSE">Course</SelectItem>
+                        <SelectItem value="SPECIALISATION">Specialisation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
 
               {/* Course URL */}
@@ -379,7 +377,6 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
                     onChange: (e) => {
                       const value = e.target.value
                       const processedLength = removeMarkdown(value).length
-                      setDescriptionLength(processedLength)
                     }
                   })}
                 />
@@ -388,7 +385,7 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
               </div>
 
               {/* Course Content - Only for regular courses */}
-              {courseType === 'COURSE' && (
+              {formType === 'COURSE' && (
                 <div className="space-y-2">
                   <Label htmlFor="content">Course Content</Label>
                   <Textarea
@@ -401,7 +398,7 @@ export default function CourseEditPage({ params }: CourseEditPageProps) {
               )}
 
               {/* Specialisation Courses - Only for specialisations */}
-              {courseType === 'SPECIALISATION' && (
+              {formType === 'SPECIALISATION' && (
                 <div className="space-y-4">
                   <div>
                     <Label>Included Courses</Label>
