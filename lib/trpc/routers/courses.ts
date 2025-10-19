@@ -795,6 +795,7 @@ export const coursesRouter = router({
         })
       }
 
+      let isNew = false
       let enrollment = await ctx.db.courseEnrollment.findUnique({
         where: {
           courseId_personId: {
@@ -816,6 +817,7 @@ export const coursesRouter = router({
       })
 
       if (!enrollment) {
+        isNew = true
         enrollment = await ctx.db.courseEnrollment.create({
           data: {
             courseId: input.courseId,
@@ -842,11 +844,11 @@ export const coursesRouter = router({
       }
 
       // Set dates based on status change
-      if (input.status === 'IN_PROGRESS' && enrollment.status !== 'IN_PROGRESS') {
+      if (input.status === 'IN_PROGRESS' && (isNew || enrollment.status !== 'IN_PROGRESS')) {
         updates.startedAt = new Date()
       }
 
-      if (input.status === 'COMPLETED' && enrollment.status !== 'COMPLETED') {
+      if (input.status === 'COMPLETED' && (isNew || enrollment.status !== 'COMPLETED')) {
         updates.completedAt = new Date()
         updates.completed = true
         updates.progress = 100
@@ -874,7 +876,7 @@ export const coursesRouter = router({
       })
 
       // If moved to completed, add course competencies to person
-      if (input.status === 'COMPLETED' && enrollment.status !== 'COMPLETED') {
+      if (input.status === 'COMPLETED' && (isNew || enrollment.status !== 'COMPLETED')) {
         console.log(`Adding competencies for completed course: ${enrollment.course.id} to person: ${personId}`)
         console.log(`Course has ${enrollment.course.competencies.length} competencies`)
 
