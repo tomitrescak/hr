@@ -53,7 +53,7 @@ interface CompetencyExtractorProps {
   buttonColor: string
   onAddCompetency: CompetencyHandler
   onCompetencyAdded: () => void
-  allCompetencies: { id: string, name: string }[] // List of all available competencies
+  allCompetencies: { id: string, name: string, type: CompetencyType }[] // List of all available competencies
   existingCompetencies?: { competencyId: string, id: string }[] // List of competencies already assigned to this entity
 }
 
@@ -100,7 +100,14 @@ export function CompetencyExtractor({
     contextMessage: string,
     entityName: string
   }) {
-    let iterable = await trpcClient.extraction.extractCompetencies.mutate(value);
+    let iterable = await trpcClient.extraction.extractCompetencies.mutate({
+      ...value,
+      excludeCompetencies: existingCompetencies.map(c => ({
+        id: c.competencyId,
+        name: allCompetencies.find(ac => ac.id === c.competencyId)?.name || '',
+        type: allCompetencies.find(ac => ac.id === c.competencyId)?.type || '',
+      }))
+    });
     for await (const value of iterable) {
       setMessage(value.message);
 

@@ -14,6 +14,11 @@ export const extractionRouter = router({
         content: z.string().min(10, 'Content must be at least 10 characters'),
         contextMessage: z.string().optional(),
         entityName: z.string().optional(),
+        excludeCompetencies: z.array(z.object({
+          name: z.string(),
+          type: z.string(),
+          description: z.string().optional(),
+        })).optional(),
       })
     )
     . mutation(async function* ({ ctx, input }) {
@@ -67,19 +72,30 @@ export const extractionRouter = router({
         additionalProperties: false
       }
 
+      // Build exclusion text if competencies are provided
+      let exclusionText = ''
+      if (input.excludeCompetencies && input.excludeCompetencies.length > 0) {
+        exclusionText = `
+
+IMPORTANT: The following competencies have already been extracted and should be OMITTED from your results:
+${input.excludeCompetencies.map(comp => `- ${comp.name} (${comp.type})${comp.description ? ': ' + comp.description : ''}`).join('\n')}
+
+Do not include any of the above competencies or very similar variations in your extraction results.`
+      }
+
       const basePrompt = `Analyze the following content and extract competencies.
 
 Content:
 ${input.content}
 
-${input.contextMessage || ''}
+${input.contextMessage || ''}${exclusionText}
 
 Extract 5-20 relevant competencies, focusing on:
 - Specific skills, technologies, and tools mentioned
 - Professional abilities demonstrated through the content
 - Knowledge areas evident from the information
 - Soft skills and behaviors shown
-- Suggest realistic proficiency levels based on evidence depth`
+- Suggest realistic proficiency levels based on evidence depth${exclusionText ? '\n- Avoid duplicating any competencies listed in the exclusion list above' : ''}`
 
 
       //       return {
