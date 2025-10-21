@@ -70,7 +70,7 @@ export function CreateOKRForm({ projectId, onSuccess }: CreateOKRFormProps) {
         description: data.description,
         metric: data.metric || undefined,
         target: data.target || undefined,
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        dueDate: data.dueDate,
       })
 
       // Then create the Key Results
@@ -229,7 +229,7 @@ export function CreateOKRForm({ projectId, onSuccess }: CreateOKRFormProps) {
                     />
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`keyResults.${index}.metric`}>Metric</Label>
                       <Input
@@ -248,7 +248,9 @@ export function CreateOKRForm({ projectId, onSuccess }: CreateOKRFormProps) {
                       />
                     </div>
                     
-                    <div className="space-y-2">
+                    
+                  </div>
+                  <div className="space-y-2">
                       <Label htmlFor={`keyResults.${index}.dueDate`}>Due Date</Label>
                       <Input
                         id={`keyResults.${index}.dueDate`}
@@ -256,7 +258,6 @@ export function CreateOKRForm({ projectId, onSuccess }: CreateOKRFormProps) {
                         {...register(`keyResults.${index}.dueDate`)}
                       />
                     </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>

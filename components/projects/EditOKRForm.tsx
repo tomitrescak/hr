@@ -76,7 +76,7 @@ export function EditOKRForm({ okr, projectId, onSuccess }: EditOKRFormProps) {
         description: data.description,
         metric: data.metric,
         target: data.target.toString(),
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        dueDate: data.dueDate,
       })
     } finally {
       setIsSubmitting(false)

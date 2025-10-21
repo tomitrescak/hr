@@ -91,13 +91,6 @@ export function CreateResponsibilityForm({ projectId, onSuccess }: CreateRespons
   const onSubmit = async (data: ResponsibilityFormData) => {
     setIsSubmitting(true)
     try {
-      // Validate capacity allocation if person is selected
-      if (data.personId && data.personId !== 'unassigned' && data.capacityAllocation && selectedPersonCapacity) {
-        if (data.capacityAllocation > selectedPersonCapacity.available) {
-          alert(`Cannot allocate ${data.capacityAllocation}%. Only ${selectedPersonCapacity.available}% capacity available.`)
-          return
-        }
-      }
       
       await createMutation.mutateAsync({
         projectId,
@@ -188,7 +181,6 @@ export function CreateResponsibilityForm({ projectId, onSuccess }: CreateRespons
               id="capacityAllocation"
               type="number"
               min="0"
-              max={selectedPersonCapacity.available}
               placeholder="e.g., 25"
               {...register('capacityAllocation', { valueAsNumber: true })}
             />
@@ -218,7 +210,7 @@ export function CreateResponsibilityForm({ projectId, onSuccess }: CreateRespons
                   {selectedPersonCapacity.available}% ({((selectedPersonCapacity.available / 100) * 43).toLocaleString(undefined, { maximumFractionDigits: 1 })}h)
                 </span>
               </div>
-              {watchedCapacityAllocation && watchedCapacityAllocation > selectedPersonCapacity.available && (
+              {selectedPersonCapacity.current > 100 && (
                 <div className="text-red-600 text-xs mt-1">
                   ⚠ Allocation exceeds available capacity
                 </div>

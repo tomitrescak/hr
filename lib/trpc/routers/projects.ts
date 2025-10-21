@@ -244,7 +244,7 @@ export const projectsRouter = router({
         description: z.string().min(10),
         metric: z.string().optional(),
         target: z.string().optional(),
-        dueDate: z.date().optional(),
+        dueDate: z.string().optional().transform((val) => val ? new Date(val) : undefined),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -274,7 +274,7 @@ export const projectsRouter = router({
         description: z.string().min(10).optional(),
         metric: z.string().optional(),
         target: z.string().optional(),
-        dueDate: z.date().optional(),
+        dueDate: z.string().optional().transform((val) => val ? new Date(val) : undefined),
       })
     )
     .mutation(async ({ ctx, input }) => {
